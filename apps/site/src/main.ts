@@ -1,4 +1,4 @@
-import { SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, stateAt, type Direction } from '@sds/core/browser'
+import { SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, type Direction } from '@sds/core/browser'
 import { drawLayout, onImagesLoaded, setSourceLabels } from '../../desktop/src/renderer/src/render'
 import './styles.css'
 
@@ -37,7 +37,8 @@ function frameAt(t: number) {
     if (ms <= len) {
       const rt = resolveTransition(SLIDE_10, b.dir, b.matched)
       const at = b.kind === 'move' ? ms : b.at === 'start' ? 0 : Infinity
-      const boxes = rt.tracks.map((tr) => ({ source: sources[tr.objectId], state: stateAt(tr, at) }))
+      const states = statesAt(rt, at)
+      const boxes = rt.tracks.map((tr, i) => ({ source: sources[tr.objectId], state: states[i] }))
       return { boxes, label: b.label }
     }
     ms -= len

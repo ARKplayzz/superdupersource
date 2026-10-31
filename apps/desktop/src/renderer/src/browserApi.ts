@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, Design, Engine, STARTER_DESIGNS, ShowSettings, SimSwitcher } from '@sds/core/browser'
+import { DEFAULT_SETTINGS, Design, Engine, STARTER_DESIGNS, ShowSettings, SimSwitcher, mergeNewStarters } from '@sds/core/browser'
 import type { AppSnapshot, Result, SdsApi } from '../../shared/api'
 
 // The same API the Electron preload provides, running entirely in the page: simulator + engine,
@@ -9,17 +9,19 @@ interface Saved {
   designs: Design[]
   shortlist: string[]
   settings: ShowSettings
+  knownStarters?: string[]
 }
 
 const KEY = 'sds-show'
 
 function read(): Saved {
-  const fresh: Saved = { designs: STARTER_DESIGNS, shortlist: ['slide-10', 'slide-11'], settings: DEFAULT_SETTINGS }
+  const fresh: Saved = { designs: STARTER_DESIGNS, shortlist: ['slide-10', 'slide-10-push', 'slide-11'], settings: DEFAULT_SETTINGS, knownStarters: STARTER_DESIGNS.map((d) => d.id) }
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return fresh
     const s = JSON.parse(raw) as Partial<Saved>
-    return { designs: s.designs?.length ? s.designs : fresh.designs, shortlist: s.shortlist ?? fresh.shortlist, settings: { ...DEFAULT_SETTINGS, ...s.settings } }
+    const merged = s.designs?.length ? mergeNewStarters(s.designs, s.knownStarters) : { designs: fresh.designs, known: STARTER_DESIGNS.map((d) => d.id) }
+    return { designs: merged.designs, knownStarters: merged.known, shortlist: s.shortlist ?? fresh.shortlist, settings: { ...DEFAULT_SETTINGS, ...s.settings } }
   } catch {
     return fresh
   }

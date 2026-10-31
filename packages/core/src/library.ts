@@ -49,6 +49,32 @@ export const SLIDE_10: Design = {
   },
 }
 
+// The same layout, but the box that isn't going full screen rides against the other one's edge:
+// the slides push the presenter off (and pull it back in), and the presenter pushes the slides.
+export const SLIDE_10_PUSH: Design = {
+  ...SLIDE_10,
+  id: 'slide-10-push',
+  name: 'Slides + presenter (push)',
+  transitions: {
+    'in:B': {
+      B: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
+      A: { placement: 'pushed', delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
+    },
+    'in:A': {
+      A: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
+      B: { placement: 'pushed', delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
+    },
+    'out:B': {
+      B: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
+      A: { placement: 'pushed', delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
+    },
+    'out:A': {
+      A: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
+      B: { placement: 'pushed', delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
+    },
+  },
+}
+
 const SIDE = (y: number) => box({ x: 12, y, size: 0.25 })
 
 export const SLIDE_11: Design = {
@@ -119,6 +145,18 @@ export const SLIDE_04: Design = {
 }
 
 // Slides 05 and 06 need 5 and 6 boxes, more than one SuperSource has. Static only in v1 (project.md §4.4).
-export const STARTER_DESIGNS: Design[] = [SLIDE_10, SLIDE_11, SLIDE_12, SLIDE_02, SLIDE_03, SLIDE_04]
+export const STARTER_DESIGNS: Design[] = [SLIDE_10, SLIDE_10_PUSH, SLIDE_11, SLIDE_12, SLIDE_02, SLIDE_03, SLIDE_04]
 
 export const DEFAULT_ROLES = ['Presenter', 'Slides', 'Wide', 'Guest']
+
+// Starter layouts that shipped before shows remembered which ones they'd seen.
+const FIRST_STARTERS = ['slide-10', 'slide-11', 'slide-12', 'slide-02', 'slide-03', 'slide-04']
+
+// Adds starter layouts a saved show has never seen (new in this version), without bringing back
+// ones the user deleted. `known` is what the show has seen before; older saves don't have it.
+export function mergeNewStarters(designs: Design[], known?: string[]): { designs: Design[]; known: string[]; added: string[] } {
+  const seen = new Set(known ?? [...FIRST_STARTERS, ...designs.map((d) => d.id)])
+  const have = new Set(designs.map((d) => d.id))
+  const added = STARTER_DESIGNS.filter((d) => !seen.has(d.id) && !have.has(d.id))
+  return { designs: [...designs, ...added], known: [...new Set([...seen, ...STARTER_DESIGNS.map((d) => d.id)])], added: added.map((d) => d.id) }
+}

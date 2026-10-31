@@ -23,6 +23,7 @@ export type Placement =
   | 'offscreen-top'
   | 'offscreen-bottom'
   | 'shrunk' // minimum size at its own centre
+  | 'pushed' // rides against the matched box's edge, keeping its final gap, so it's pushed off / pulled in
 
 export interface Motion {
   placement?: Placement // ignored for the matched object, which is always full screen

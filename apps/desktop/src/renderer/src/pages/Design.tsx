@@ -16,7 +16,7 @@ import {
   motionFor,
   parseTransitionKey,
   resolveTransition,
-  stateAt,
+  statesAt,
   transitionKeys,
   visibleRect,
 } from '@sds/core/browser'
@@ -28,6 +28,7 @@ import { Frame, Icon } from '../ui'
 
 const PLACEMENTS: { value: Placement; label: string }[] = [
   { value: 'in-place', label: 'In place (revealed / covered)' },
+  { value: 'pushed', label: 'Pushed by the full-screen box' },
   { value: 'offscreen-nearest', label: 'Off nearest edge' },
   { value: 'offscreen-left', label: 'Off left' },
   { value: 'offscreen-right', label: 'Off right' },
@@ -117,7 +118,8 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
   // What the canvas shows: final form in layout mode, the transition at `time` in motion mode.
   const layoutBoxes = (): { id: string; source: number; state: BoxState }[] => {
     if (mode === 'motion' && resolved) {
-      return resolved.tracks.map((t) => ({ id: t.objectId, source: sourceOf(design.objects.find((o) => o.id === t.objectId)!), state: stateAt(t, time) }))
+      const states = statesAt(resolved, time)
+      return resolved.tracks.map((t, i) => ({ id: t.objectId, source: sourceOf(design.objects.find((o) => o.id === t.objectId)!), state: states[i] }))
     }
     return design.objects.map((o) => ({ id: o.id, source: sourceOf(o), state: o.final }))
   }
@@ -369,7 +371,7 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
                 <span className="tl-name">{objectName(design, t.objectId)}</span>
                 <div className="tl-track">
                   <div
-                    className={`tl-bar ${t.objectId === resolved.matchedId ? 'matched' : ''}`}
+                    className={`tl-bar ${t.objectId === resolved.matchedId ? 'matched' : t.follow ? 'follows' : ''}`}
                     style={{ left: `${(t.motion.delayMs / Math.max(1, total)) * 100}%`, width: `${Math.max(0.5, (t.motion.durationMs / Math.max(1, total)) * 100)}%` }}
                   />
                   <div className="tl-head" style={{ left: `${(time / Math.max(1, total)) * 100}%` }} />
@@ -565,6 +567,17 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
                           </select>
                         </label>
                       )}
+                      {t.follow ? (
+                        <p className="muted small-text">
+                          Moves with {objectName(design, resolved.matchedId)}, against its {t.follow.side === 'right' ? 'right' : t.follow.side === 'left' ? 'left' : t.follow.side === 'above' ? 'top' : 'bottom'}{' '}
+                          edge, using its timing.
+                        </p>
+                      ) : !matched && t.motion.placement === 'pushed' ? (
+                        <p className="small-text warn-text">
+                          Can't be pushed: it overlaps {objectName(design, resolved.matchedId)} both ways in the layout, so there's no edge to push against. It stays in place.
+                        </p>
+                      ) : null}
+                      {!t.follow && (
                       <div className="grid3">
                         <label className="field">
                           <span>Delay ms</span>
@@ -585,6 +598,7 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
                           </select>
                         </label>
                       </div>
+                      )}
                     </div>
                   )
                 })}

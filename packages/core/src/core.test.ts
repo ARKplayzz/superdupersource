@@ -1,19 +1,20 @@
 import { describe, expect, test } from 'vitest'
 import { Engine } from './engine'
 import { lerpBox, offscreen, visibleRect } from './geometry'
-import { SLIDE_10, STARTER_DESIGNS } from './library'
+import { SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, mergeNewStarters } from './library'
 import { findMatch, resolveSource } from './matching'
 import { DEFAULT_SETTINGS, ShowSettings } from './model'
 import { planIn, planOut } from './plan'
 import { SimSwitcher } from './sim'
 import { designTally, isOnAir, meProgramInput, ssInput } from './switcher'
-import { buildFrames, motionFor, resolveTransition } from './transitions'
+import { buildFrames, motionFor, resolveTransition, statesAt } from './transitions'
 import { FULLSCREEN, fromRaw, toRaw } from './units'
 
 const CAM = 1 // Presenter
 const SLIDES = 2
 const WIDE = 3
 const settings: ShowSettings = { ...DEFAULT_SETTINGS }
+const byId = (id: string) => STARTER_DESIGNS.find((d) => d.id === id)!
 
 function sim() {
   return new SimSwitcher({ fps: 50 })
@@ -101,9 +102,60 @@ describe('transitions', () => {
   })
 
   test('no custom motion falls back to reveal in place', () => {
-    const { motion, origin } = motionFor(STARTER_DESIGNS[1], 'in', 'B', 'A')
+    const { motion, origin } = motionFor(byId('slide-11'), 'in', 'B', 'A')
     expect(origin).toBe('default')
     expect(motion.placement).toBe('in-place')
+  })
+})
+
+describe('pushed boxes', () => {
+  test('the presenter stays against the slides edge on every frame, both ways', () => {
+    for (const key of ['in:A', 'out:A'] as const) {
+      const dir = key.startsWith('in') ? 'in' : 'out'
+      const rt = resolveTransition(SLIDE_10_PUSH, dir, 'A')
+      expect(rt.tracks[1].follow).toMatchObject({ side: 'right' })
+      const gap = rt.tracks[1].follow!.gap
+      for (const [a, b] of buildFrames(rt, 50)) {
+        expect(visibleRect(b).l).toBeCloseTo(visibleRect(a).r + gap, 6)
+        expect(b.size).toBe(SLIDE_10.objects[1].final.size) // pushed, not scaled
+      }
+    }
+  })
+
+  test('the slides stay against the presenter edge when the presenter goes full screen', () => {
+    const rt = resolveTransition(SLIDE_10_PUSH, 'out', 'B')
+    expect(rt.tracks[1].follow).toMatchObject({ side: 'left' })
+    for (const [b, a] of buildFrames(rt, 50)) expect(visibleRect(a).r).toBeCloseTo(visibleRect(b).l - rt.tracks[1].follow!.gap, 6)
+  })
+
+  test('IN from slides starts with the presenter just off screen and ends in the layout', () => {
+    const frames = buildFrames(resolveTransition(SLIDE_10_PUSH, 'in', 'A'), 50)
+    expect(visibleRect(frames[0][1]).l).toBeGreaterThanOrEqual(16 - 1e-6)
+    expect(frames.at(-1)![1]).toEqual(SLIDE_10.objects[1].final)
+    expect(frames.at(-1)![0]).toEqual(SLIDE_10.objects[0].final)
+  })
+
+  test('a pushed box takes the full-screen box timing', () => {
+    const rt = resolveTransition(SLIDE_10_PUSH, 'out', 'A')
+    expect(rt.tracks[1].motion).toMatchObject({ placement: 'pushed', durationMs: 600, delayMs: 0 })
+  })
+
+  test('boxes that overlap both ways fall back to in place', () => {
+    const overlap = { ...SLIDE_10_PUSH, objects: [SLIDE_10.objects[0], { ...SLIDE_10.objects[1], final: { ...SLIDE_10.objects[1].final, x: 0 } }] }
+    const rt = resolveTransition(overlap, 'in', 'A')
+    expect(rt.tracks[1].follow).toBeUndefined()
+    expect(statesAt(rt, 0)[1]).toEqual(overlap.objects[1].final)
+  })
+})
+
+describe('starter layouts in saved shows', () => {
+  test('an older save gets the new layout once, and deleted ones stay deleted', () => {
+    const saved = STARTER_DESIGNS.filter((d) => d.id !== 'slide-10-push' && d.id !== 'slide-12')
+    const first = mergeNewStarters(saved)
+    expect(first.added).toEqual(['slide-10-push'])
+    // The user deletes the new one; it doesn't come back next time.
+    const again = mergeNewStarters(first.designs.filter((d) => d.id !== 'slide-10-push'), first.known)
+    expect(again.added).toEqual([])
   })
 })
 
@@ -177,7 +229,7 @@ describe('plans', () => {
   })
 
   test('too many objects for the SuperSource is an error', () => {
-    expect(() => planIn(STARTER_DESIGNS[2], 'B', { ...ctx, boxCount: 3 })).toThrow(/4 boxes/)
+    expect(() => planIn(byId('slide-12'), 'B', { ...ctx, boxCount: 3 })).toThrow(/4 boxes/)
   })
 })
 

@@ -274,7 +274,7 @@ Small, resizable window (about 1100×700, minimum 960×600). Icon rail on the le
 - **Transition picker:** one tab per transition the design can do, generated from its objects: "IN from Presenter", "IN from Slides", "OUT to Presenter", "OUT to Slides". Picking one shows its timeline and plays it on the canvas.
 - **Motion,** per object, within the selected transition:
   - The matched object's start (IN) or end (OUT) is fixed at full screen.
-  - Every other object: offscreen left/right/top/bottom, scale from centre, crop wipe from an edge, or already in place.
+  - Every other object: offscreen left/right/top/bottom, scale from centre, crop wipe from an edge, already in place, or **pushed**: it rides against the full-screen box's edge with its final gap, on that box's timing, so the slides push the presenter off and pull it back in. Added 31 Oct 2026 with a *Slides + presenter (push)* copy of Slide 10 that uses it in all four transitions.
   - Duration, delay (for staggering), easing (presets plus a curve editor).
 - **Timeline:** one track per object, so the stagger is visible.
 - **Test on preview** (§7).
