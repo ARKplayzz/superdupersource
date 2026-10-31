@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/dist
+**/out
+**/pkg
+**/*.tgz
+spike
+.claude

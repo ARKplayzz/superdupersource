@@ -4,8 +4,37 @@
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "web", "-w", "@sds/desktop"],
+      "runtimeArgs": [
+        "run",
+        "web",
+        "-w",
+        "@sds/desktop"
+      ],
       "port": 5199
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@sds/site"
+      ],
+      "port": 5198
+    },
+    {
+      "name": "site-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "5197",
+        "--strictPort"
+      ],
+      "cwd": "apps/site",
+      "port": 5197
     }
   ]
 }

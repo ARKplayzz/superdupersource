@@ -378,7 +378,7 @@ superdupersource/
   apps/desktop/         Electron app; its renderer also runs in a plain browser on the simulator (built)
   apps/companion/       Companion module (built)
   packages/protocol/    types for the app <-> Companion link (built)
-  apps/site/            download page (superdupersource.kennedys.nz)
+  apps/site/            download page and /demo (built; superdupersource.kennedys.nz)
   spike/                phase 0 hardware tests (built, not yet run)
   Supersources-templates/  backgrounds and layout guides
 ```
@@ -389,16 +389,15 @@ Alternative considered: a .NET app using Blackmagic's official ATEM SDK. It's we
 
 ## 12. Download page
 
-`superdupersource.kennedys.nz`, a single static page, deployed by CapRover from the GitHub repo on push.
+Built (`apps/site`), served at `superdupersource.kennedys.nz` by CapRover, which rebuilds it from the GitHub repo on every push to `main`.
 
-- What it does, in one sentence, plus a short clip of the slide 10 transition (camera to layout and back) as the first thing on the page.
-- Download button for the latest Windows installer, with version and date. Pulled from GitHub Releases at build time.
-- Companion module download, and later a link once it's in Companion's built-in module list (Bitfocus accepts public modules by submission).
-- "Not affiliated with Blackmagic Design" in the footer.
-- Supported switchers, requirements, and a changelog.
-- Designed to match the app. Same anti-slop rules as §14.
+- The hero is a live canvas running the real Slide 10 transitions (in from the presenter, out to the slides and back) with the app's own renderer, so there's no video to keep in sync with the app.
+- `/demo` is the desktop UI built for the browser, running on the simulator. Nothing to install; layouts are saved in the browser.
+- The download cards read the latest GitHub release at load time and offer the `.exe` and the Companion `.tgz` when a release has them. Until then they say there's no release yet, and the hero's second button reads "Downloads" instead of "Download for Windows".
+- Supported switchers, honestly labelled (first to be tested / planned), and "not affiliated with or endorsed by Blackmagic Design" in the footer.
+- Light and dark themes, phone layout down to 375 px.
 
-The repo is public, so installers live on GitHub Releases. electron-updater reads the same releases for auto-update.
+Still to do with phase 5: a release workflow that builds and signs the installer and attaches it, with the module `.tgz`, to a GitHub release.
 
 ---
 

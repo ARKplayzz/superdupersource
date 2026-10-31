@@ -27,6 +27,14 @@ export function image(file: string): HTMLImageElement | null {
 
 const placeholders = new Map<number, HTMLCanvasElement>()
 
+// Stand-in pictures carry their input name ("CAM1 Presenter cam"). The download page turns it off.
+let sourceLabels = true
+export function setSourceLabels(on: boolean): void {
+  if (on === sourceLabels) return
+  sourceLabels = on
+  placeholders.clear()
+}
+
 function person(g: CanvasRenderingContext2D, cx: number, base: number, scale: number, colour: string) {
   g.fillStyle = colour
   g.beginPath()
@@ -92,11 +100,14 @@ function drawPlaceholder(id: number, short: string, name: string): HTMLCanvasEle
     g.fillStyle = grad
     g.fillRect(0, 0, W, H)
     person(g, W / 2, H, 1, 'rgba(10,12,16,0.92)')
-    g.strokeStyle = 'rgba(255,255,255,0.12)'
-    g.lineWidth = 3
-    g.strokeRect(W / 2 - 1, 0, 2, H)
+    if (sourceLabels) {
+      // Centre line, to judge crops by.
+      g.strokeStyle = 'rgba(255,255,255,0.12)'
+      g.lineWidth = 3
+      g.strokeRect(W / 2 - 1, 0, 2, H)
+    }
   }
-  label(g, short, name)
+  if (sourceLabels) label(g, short, name)
   return c
 }
 

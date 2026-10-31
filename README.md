@@ -16,6 +16,7 @@ There's no switcher to test against yet, so the app runs on a simulated one. The
 | `apps/desktop` | The Windows tray app (Electron + React). |
 | `apps/companion` | The Bitfocus Companion module (Companion 4.3 or later). |
 | `packages/protocol` | Types for the link between the app and the Companion module. |
+| `apps/site` | The download page at superdupersource.kennedys.nz, with the in-browser demo at `/demo`. |
 | `spike` | Phase 0 scripts to run on a real ATEM. |
 | `Supersources-templates` | Background and cutout PNGs. |
 
@@ -72,6 +73,16 @@ npm run package -w companion-module-kennedys-superdupersource
 ```
 
 That writes `apps/companion/kennedys-superdupersource-0.1.0.tgz`. In Companion, import it under Modules, add a *SuperDuperSource* connection, and drag buttons from its presets. [The module's help page](apps/companion/companion/HELP.md) covers the buttons.
+
+## Download page
+
+`apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slide 10 transitions with the app's own renderer, and `/demo` is the desktop UI running on the simulator in the browser. It lists the latest GitHub release when there is one.
+
+```bash
+npm run dev -w @sds/site
+```
+
+CapRover builds it from the repo root on every push to `main`, using `captain-definition` and `apps/site/Dockerfile`.
 
 ## Licence
 
