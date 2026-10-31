@@ -44,6 +44,7 @@ export function createBrowserApi(): SdsApi {
       settings: show.settings,
       app: { version: 'browser', openAtLogin: false },
       companion: { listening: false, host: '', port: show.settings.localApi.port, clients: 0, error: 'Not available in the browser version' },
+      connection: { mode: 'simulator', address: '', status: 'simulator', error: null, lastTakeLateMs: null },
     })
 
   let queued = false
@@ -108,6 +109,9 @@ export function createBrowserApi(): SdsApi {
       persist()
     },
     setOpenAtLogin: async () => {},
+    setConnection: async (mode) =>
+      mode === 'atem' ? { ok: false, error: 'The browser version only runs the simulator. Install the Windows app to connect to an ATEM.' } : { ok: true },
+    discover: async () => [],
     sim: {
       cut: async (me) => switcher.cut(me),
       setPreview: async (me, input) => switcher.setPreview(me, input),

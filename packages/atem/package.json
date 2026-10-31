@@ -1,0 +1,23 @@
+{
+  "name": "@sds/atem",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ATEM switcher adapter: implements the core Switcher interface over atem-connection",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@sds/core": "^0.1.0",
+    "atem-connection": "^3.10.3",
+    "bonjour-service": "^1.4.4"
+  }
+}

@@ -6,7 +6,7 @@ A layout waits on preview in its final form. When it's taken to air, it starts a
 
 ## Status
 
-There's no switcher to test against yet, so the app runs on a simulated one. The simulator has the same inputs and buses as a 2 M/E and runs takes frame by frame, the way the switcher would. The ATEM connection comes after the hardware test in [spike/](spike/README.md).
+The app drives either a real ATEM over the network or a built-in simulator with the same inputs and buses as a 2 M/E. The ATEM connection is written and tested against a stand-in switcher, but not yet against real hardware; the first checks to run on one are in [spike/](spike/README.md). Pick the connection in Setup.
 
 ## Layout
 
@@ -15,6 +15,7 @@ There's no switcher to test against yet, so the app runs on a simulated one. The
 | `packages/core` | Design model, motion maths, source matching, take planning, the engine and the simulator. No Electron, no ATEM. |
 | `apps/desktop` | The Windows tray app (Electron + React). |
 | `apps/companion` | The Bitfocus Companion module (Companion 4.3 or later). |
+| `packages/atem` | The ATEM adapter: connection, discovery, state, and takes streamed frame by frame. |
 | `packages/protocol` | Types for the link between the app and the Companion module. |
 | `apps/site` | The download page at superdupersource.kennedys.nz, with the in-browser demo at `/demo`. |
 | `spike` | Phase 0 scripts to run on a real ATEM. |

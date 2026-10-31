@@ -43,7 +43,26 @@ export class Engine extends Emitter {
     super()
     this.slots = Array.from({ length: switcher.info.superSourceCount }, (_, ss) => ({ ss, designId: null, phase: 'idle' as Phase }))
     this.setDesigns(designs)
-    switcher.on('state', (s) => this.onState(s))
+    switcher.on('state', this.stateListener)
+  }
+
+  private readonly stateListener = (s: SwitcherState) => this.onState(s)
+
+  // Stop following the switcher (when the app swaps switchers or rebuilds the engine).
+  dispose(): void {
+    this.switcher.off('state', this.stateListener)
+  }
+
+  // Carry loaded layouts over from a previous engine (after a reconnect). Sends nothing to the
+  // switcher: the phases are worked out from what's on air right now.
+  restore(designIds: (string | null)[]): void {
+    const state = this.switcher.getState()
+    this.slots.forEach((slot, i) => {
+      const id = designIds[i] ?? null
+      slot.designId = id && this.designs.has(id) ? id : null
+      slot.phase = !slot.designId ? 'idle' : isOnAir(state, slot.ss, this.settings.takeMe) ? 'on-air' : 'armed'
+    })
+    this.changed()
   }
 
   setDesigns(designs: Design[]): void {
@@ -85,6 +104,7 @@ export class Engine extends Emitter {
     const design = this.designs.get(designId)
     if (!design) throw new Error(`Unknown design ${designId}`)
     if (this.busy()) throw new Error('A take is running')
+    if (this.slots.length === 0) throw new Error("The switcher isn't connected, or it has no SuperSource")
     const slot = this.freeSlot(designId)
     if (!slot) throw new Error('No free SuperSource: the only one is on air')
     const ops: Op[] = [
@@ -92,10 +112,17 @@ export class Engine extends Emitter {
       ...armOps(design, this.context(slot.ss, design)),
       { op: 'preview', me: this.settings.takeMe, input: ssInput(slot.ss) },
     ]
+    const before = { designId: slot.designId, phase: slot.phase }
     slot.designId = designId
     slot.phase = 'armed'
     this.changed()
-    await this.switcher.run(ops)
+    try {
+      await this.switcher.run(ops)
+    } catch (e) {
+      Object.assign(slot, before)
+      this.changed()
+      throw e
+    }
     return slot
   }
 
@@ -134,11 +161,20 @@ export class Engine extends Emitter {
     const plan = next.action === 'in' ? planIn(design, matchedId, ctx, fallback) : planOut(design, matchedId, ctx, fallback)
 
     // Plain takes leave the phase to onState, which follows the switcher (a mix takes a while).
+    const phaseBefore = slot.phase
     if (plan.kind === 'animated') {
       slot.phase = next.action === 'in' ? 'animating-in' : 'animating-out'
       this.changed()
     }
-    await this.switcher.run(plan.ops)
+    try {
+      await this.switcher.run(plan.ops)
+    } catch (e) {
+      // The take didn't finish (connection lost, say). Go back to following the switcher.
+      const state = this.switcher.getState()
+      slot.phase = isOnAir(state, slot.ss, this.settings.takeMe) ? 'on-air' : phaseBefore === 'on-air' ? 'armed' : phaseBefore
+      this.changed()
+      return { action: 'none', reason: `The take stopped: ${e instanceof Error ? e.message : String(e)}` }
+    }
     if (plan.kind === 'animated') slot.phase = next.action === 'in' ? 'on-air' : 'armed'
 
     this.log.unshift({

@@ -2,7 +2,7 @@
 
 Animated SuperSource transitions for Blackmagic ATEM switchers. Not affiliated with Blackmagic Design.
 
-Draft 3, 31 Oct 2026. Status: building without hardware. The core logic, a simulated switcher and the desktop app run and are tested; the ATEM connection waits for a switcher (§13).
+Draft 4, 31 Oct 2026. Status: building without hardware. The core logic, the simulator, the desktop app, the Companion module, the download page and the ATEM connection are built and tested; nothing has run on a real switcher yet (§13).
 
 Decided so far:
 
@@ -417,7 +417,16 @@ Still to do with phase 5: a release workflow that builds and signs the installer
 - `packages/core`: design model, screen-space interpolation, per-source IN/OUT transitions with defaults (OUT reverses a custom IN), source matching (§6), take plans as frame-by-frame ops, the engine state machine (load, next take, take, bypass takes never animate), the simulator, and starter designs from slides 10, 11, 12, 02, 03 and 04. 28 tests.
 - `apps/desktop`: tray app with the SuperSources, Design and Setup tabs, plus a Simulator view standing in for the multiview and panel. Design tab: drag, resize and crop boxes, fit a box to a guide cutout in one click, and edit and play every IN/OUT transition.
 
-**Phase 1: slide 10 end to end on hardware.** Run phase 0, then write the ATEM adapter: connection and discovery, tally, and running take ops (streamed first; macros once the format is known, see below). Used in a real show.
+**Phase 1: ATEM connection (built 31 Oct 2026, untested on hardware).** `packages/atem` has `AtemSwitcher`, which implements the same `Switcher` interface as the simulator over atem-connection:
+
+- Connects by IP; atem-connection reconnects on its own, and the app shows connecting / connected in the title bar and Setup.
+- Reads the model, video mode, M/E count, SuperSource and box counts from the switcher rather than assuming a model.
+- Maps the switcher's state (buses, transitions, upstream keys, SuperSource boxes and art, auxes, input names) to the core's state, so matching and tally work unchanged.
+- Runs take ops by streaming: each frame's box moves go out as one batch, scheduled against absolute times. Windows timers tick every ~15.6 ms, so it sleeps only while more than a tick remains and yields with `setImmediate` for the rest; measured lateness is under 0.05 ms, against 12 ms with plain `setTimeout`. (The spike had the same problem and is fixed too.)
+- Discovery: Bonjour plus a /24 scan, behind "Find switchers" in Setup.
+- After a reconnect, loaded layouts are carried over without sending anything to the switcher. A take that fails partway reports why and doesn't leave a layout stuck mid-animation.
+
+Tested with a fake switcher built on atem-connection's own state object (load, IN, OUT, frame timing, reconnects), and in the built Electron app pointed at an address with no switcher. To finish phase 1 on hardware: run phase 0, connect, and use Slide 10 in a real show. Setup shows how late the PC sent the last take's frames, as a timing check.
 
 Found while building: a take macro can't be made by *recording*, because recording executes each command live, cut included. Smart macros need the macro binary format so the app can write them directly. The phase 0 macro test saves downloaded macro bytes for exactly this; until then, takes stream from the PC.
 

@@ -2,8 +2,8 @@ import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'electron-vite'
 
-// @sds/core is TypeScript source in the workspace, so bundle it rather than externalize it.
-const bundleCore = { externalizeDeps: { exclude: ['@sds/core'] } }
+// The @sds packages are TypeScript source in the workspace, so bundle them rather than externalize them.
+const bundleCore = { externalizeDeps: { exclude: ['@sds/core', '@sds/atem'] } }
 
 export default defineConfig({
   main: { build: bundleCore },

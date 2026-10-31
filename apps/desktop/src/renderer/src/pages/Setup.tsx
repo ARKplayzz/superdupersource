@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ShowSettings } from '@sds/core/browser'
-import type { AppSnapshot } from '../../../shared/api'
+import type { AppSnapshot, FoundSwitcher } from '../../../shared/api'
 import { Section } from '../ui'
 
 export function Setup({ snap }: { snap: AppSnapshot }) {
@@ -14,35 +14,7 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
 
   return (
     <div className="setup">
-      <Section title="Switcher">
-        <div className="setup-grid">
-          <div className="field">
-            <span>Connection</span>
-            <div className="seg">
-              <button className="on">Simulator</button>
-              <button disabled title="Arrives after the phase 0 hardware test">
-                ATEM over network
-              </button>
-            </div>
-          </div>
-          <dl className="facts">
-            <dt>Model</dt>
-            <dd>{snap.info.model}</dd>
-            <dt>Video</dt>
-            <dd className="num">{snap.info.fps} fps</dd>
-            <dt>M/Es</dt>
-            <dd className="num">{snap.info.meCount}</dd>
-            <dt>SuperSources</dt>
-            <dd className="num">
-              {snap.info.superSourceCount} × {snap.info.boxCount} boxes
-            </dd>
-          </dl>
-        </div>
-        <p className="muted small-text">
-          The ATEM connection needs a real switcher to build and test against. Until then, everything runs on the simulator, which works the same
-          way: same inputs, same takes, frame by frame.
-        </p>
-      </Section>
+      <SwitcherSection snap={snap} />
 
       <Section title="Roles">
         <p className="muted small-text">Layouts use roles, not input numbers. Set them once per venue and every layout follows.</p>
@@ -169,5 +141,136 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
         <p className="muted small-text num">Version {snap.app.version}. Closing the window keeps it running in the tray.</p>
       </Section>
     </div>
+  )
+}
+
+const STATUS_TEXT = {
+  simulator: 'Simulator running',
+  connecting: 'Connecting…',
+  connected: 'Connected',
+  disconnected: 'Not connected',
+}
+
+function SwitcherSection({ snap }: { snap: AppSnapshot }) {
+  const c = snap.connection
+  const [mode, setMode] = useState(c.mode)
+  const [address, setAddress] = useState(c.address)
+  const [found, setFound] = useState<FoundSwitcher[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const changed = mode !== c.mode || (mode === 'atem' && address.trim() !== c.address)
+
+  const apply = async () => {
+    setError(null)
+    const res = await window.sds.setConnection(mode, address)
+    if (!res.ok) setError(res.error)
+  }
+
+  const search = async () => {
+    setSearching(true)
+    setFound(null)
+    try {
+      setFound(await window.sds.discover())
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const chip = c.status === 'connected' ? 'ok' : c.status === 'simulator' ? '' : 'warn'
+
+  return (
+    <Section title="Switcher">
+      <div className="setup-grid">
+        <div className="field">
+          <span>Connection</span>
+          <div className="seg">
+            <button className={mode === 'simulator' ? 'on' : ''} onClick={() => setMode('simulator')}>
+              Simulator
+            </button>
+            <button className={mode === 'atem' ? 'on' : ''} onClick={() => setMode('atem')}>
+              ATEM over network
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <span>Status</span>
+          <div className={`chip ${chip}`}>
+            <span className="dot" />
+            {c.mode === 'atem' ? `${STATUS_TEXT[c.status]} · ${c.address}` : STATUS_TEXT[c.status]}
+          </div>
+        </div>
+      </div>
+
+      {mode === 'atem' && (
+        <>
+          <div className="row">
+            <label className="field grow">
+              <span>Switcher IP address</span>
+              <input
+                type="text"
+                placeholder="192.168.10.240"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void apply()}
+              />
+            </label>
+            <button className="btn small align-end" onClick={() => void search()} disabled={searching}>
+              {searching ? 'Searching…' : 'Find switchers'}
+            </button>
+          </div>
+          {found && (
+            <div className="found">
+              {found.length === 0 ? (
+                <span className="muted small-text">None found. Check this PC is on the switcher's network, or type the address.</span>
+              ) : (
+                found.map((f) => (
+                  <button key={f.address} className="found-row" onClick={() => setAddress(f.address)}>
+                    <span>{f.name}</span>
+                    <span className="muted num">
+                      {f.address} · {f.via === 'bonjour' ? 'Bonjour' : 'scan'}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {changed && (
+        <div className="row">
+          <button className="btn primary small" onClick={() => void apply()}>
+            {mode === 'atem' ? 'Connect' : 'Switch to the simulator'}
+          </button>
+          <span className="muted small-text">Layouts loaded on the current switcher will need loading again.</span>
+        </div>
+      )}
+      {(error || c.error) && <p className="small-text warn-text">{error ?? c.error}</p>}
+
+      <dl className="facts">
+        <dt>Model</dt>
+        <dd>{snap.info.model}</dd>
+        <dt>Video</dt>
+        <dd className="num">{snap.info.fps} fps</dd>
+        <dt>M/Es</dt>
+        <dd className="num">{snap.info.meCount}</dd>
+        <dt>SuperSources</dt>
+        <dd className="num">
+          {snap.info.superSourceCount} × {snap.info.boxCount} boxes
+        </dd>
+        {c.lastTakeLateMs && (
+          <>
+            <dt title="How late this PC sent each frame of the last take">Last take</dt>
+            <dd className="num">
+              frames sent within {c.lastTakeLateMs.p95} ms of time (worst {c.lastTakeLateMs.max} ms)
+            </dd>
+          </>
+        )}
+      </dl>
+      <p className="muted small-text">
+        Takes are streamed from this PC, one batch of box moves per frame, so they need a steady network to the switcher. A wired connection on the same
+        switch is best.
+      </p>
+    </Section>
   )
 }

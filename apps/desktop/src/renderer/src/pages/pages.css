@@ -634,3 +634,32 @@
 .row > select.grow {
   width: 0;
 }
+
+.align-end {
+  align-self: flex-end;
+}
+
+.found {
+  display: grid;
+  gap: 2px;
+}
+
+.found-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.found-row:hover {
+  border-color: var(--accent);
+}
+
+.warn-text {
+  color: #d69e2e;
+}

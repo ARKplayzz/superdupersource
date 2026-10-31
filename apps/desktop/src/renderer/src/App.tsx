@@ -36,9 +36,9 @@ export function App() {
           SuperDuperSource <small>.kennedys</small>
         </div>
         <div className="status">
-          <span className={`chip ${snap.info.simulated ? 'sim' : ''}`}>
+          <span className={`chip ${snap.connection.status === 'simulator' ? 'sim' : snap.connection.status === 'connected' ? 'ok' : 'warn'}`}>
             <span className="dot" />
-            {snap.info.model} · {snap.info.fps} fps
+            {snap.connection.status === 'connecting' ? `Connecting to ${snap.connection.address}…` : `${snap.info.model} · ${snap.info.fps} fps`}
           </span>
           {snap.slots.map((slot) => {
             const design = snap.designs.find((d) => d.id === slot.designId)
@@ -73,7 +73,8 @@ export function App() {
         {tab === 'layouts' && <SuperSources snap={snap} onEdit={openDesign} onMessage={setToast} />}
         {tab === 'design' && <Design snap={snap} designId={editing} onSelect={setEditing} onMessage={setToast} />}
         {tab === 'setup' && <Setup snap={snap} />}
-        {tab === 'simulator' && <Simulator snap={snap} onMessage={setToast} />}
+        {tab === 'simulator' &&
+          (snap.info.simulated ? <Simulator snap={snap} onMessage={setToast} /> : <SuperSources snap={snap} onEdit={openDesign} onMessage={setToast} />)}
       </main>
       <Toast message={toast} onDone={() => setToast(null)} />
     </div>

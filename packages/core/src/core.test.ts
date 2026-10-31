@@ -258,6 +258,41 @@ describe('engine with the simulator', () => {
     expect(designTally(s.getState(), engine.slots, 'slide-10').tally).toBe('pgm')
   })
 
+  test('restore carries loaded layouts over without sending anything', async () => {
+    const s = sim()
+    const first = new Engine(s, settings, STARTER_DESIGNS)
+    await drive(s, first.load('slide-10'))
+    s.cut(0)
+    first.dispose()
+    const before = structuredClone(s.getState())
+    const second = new Engine(s, settings, STARTER_DESIGNS)
+    second.restore(first.slots.map((x) => x.designId))
+    expect(second.slots[0]).toMatchObject({ designId: 'slide-10', phase: 'on-air' })
+    expect(s.getState()).toEqual(before)
+    // The old engine no longer reacts.
+    s.cut(0)
+    expect(first.slots[0].phase).toBe('on-air')
+    expect(second.slots[0].phase).toBe('armed')
+  })
+
+  test('a take that fails partway reports why and leaves no stuck phase', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    await drive(s, engine.load('slide-10'))
+    const run = s.run.bind(s)
+    s.run = () => Promise.reject(new Error('Not connected to the switcher'))
+    const res = await engine.take()
+    expect(res).toEqual({ action: 'none', reason: 'The take stopped: Not connected to the switcher' })
+    expect(engine.slots[0].phase).toBe('armed')
+    s.run = run
+  })
+
+  test('load with no SuperSource says why', async () => {
+    const s = new SimSwitcher({ superSourceCount: 0 })
+    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    await expect(engine.load('slide-10')).rejects.toThrow(/isn't connected, or it has no SuperSource/)
+  })
+
   test('4 M/E with two SuperSources loads into the idle one', async () => {
     const s = new SimSwitcher({ superSourceCount: 2 })
     const engine = new Engine(s, settings, STARTER_DESIGNS)

@@ -50,9 +50,23 @@ export class LocalApi {
   status: LocalApiStatus = { listening: false, host: '127.0.0.1', port: 0, clients: 0, error: null }
   onStatus: (s: LocalApiStatus) => void = () => {}
 
+  private readonly onChange = () => this.changed()
+  private bound: { engine: Engine; switcher: Switcher } | null = null
+
   constructor(private readonly src: LocalApiSource) {
-    src.switcher.on('state', () => this.changed())
-    src.engine.on('change', () => this.changed())
+    this.rebind()
+  }
+
+  // Follow whatever switcher and engine the source has now (the app can swap them at runtime).
+  rebind(): void {
+    if (this.bound) {
+      this.bound.switcher.off('state', this.onChange)
+      this.bound.engine.off('change', this.onChange)
+    }
+    this.bound = { engine: this.src.engine, switcher: this.src.switcher }
+    this.bound.switcher.on('state', this.onChange)
+    this.bound.engine.on('change', this.onChange)
+    this.changed()
   }
 
   async listen(port: number, allowRemote: boolean): Promise<void> {

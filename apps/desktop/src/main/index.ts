@@ -1,7 +1,8 @@
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage } from 'electron'
+import { AtemSwitcher, discoverSwitchers } from '@sds/atem'
 import { Design, Engine, ShowSettings, SimSwitcher } from '@sds/core'
-import { AppSnapshot, CHANNEL, Result } from '../shared/api'
+import { AppSnapshot, CHANNEL, ConnectionInfo, Result } from '../shared/api'
 import { LocalApi } from './localApi'
 import { loadShow, saveShow } from './store'
 
@@ -10,16 +11,20 @@ if (!app.requestSingleInstanceLock()) app.quit()
 
 const icon = (size: 16 | 32 | 256) => nativeImage.createFromPath(join(__dirname, `../../resources/icon-${size}.png`))
 
-// Until the ATEM adapter exists (it needs hardware to test), the app runs on the simulator.
-const switcher = new SimSwitcher({ fps: 50 })
-switcher.start()
-
 const show = loadShow()
-const engine = new Engine(switcher, show.settings, show.designs)
+
+// The app drives either the simulator or a real ATEM. Both implement the core Switcher interface,
+// so the engine, the window and the Companion API don't care which.
+let switcher: SimSwitcher | AtemSwitcher = new SimSwitcher({ fps: 50 })
+let engine = new Engine(switcher, show.settings, show.designs)
 
 const localApi = new LocalApi({
-  engine,
-  switcher,
+  get engine() {
+    return engine
+  },
+  get switcher() {
+    return switcher
+  },
   designs: () => show.designs,
   shortlist: () => show.shortlist,
   settings: () => show.settings,
@@ -29,6 +34,21 @@ const localApi = new LocalApi({
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
+
+function connectionInfo(): ConnectionInfo {
+  const { mode, address } = show.settings.connection
+  if (!(switcher instanceof AtemSwitcher)) return { mode, address, status: 'simulator', error: null, lastTakeLateMs: null }
+  const late = [...switcher.lastTakeLateMs].sort((a, b) => a - b)
+  return {
+    mode,
+    address,
+    status: switcher.status,
+    error: switcher.status === 'connected' ? null : switcher.lastError,
+    lastTakeLateMs: late.length ? { p95: round(late[Math.floor(late.length * 0.95)]), max: round(late[late.length - 1]) } : null,
+  }
+}
+
+const round = (v: number) => Math.round(v * 100) / 100
 
 function snapshot(): AppSnapshot {
   return {
@@ -42,6 +62,7 @@ function snapshot(): AppSnapshot {
     settings: show.settings,
     app: { version: app.getVersion(), openAtLogin: app.getLoginItemSettings().openAtLogin },
     companion: localApi.status,
+    connection: connectionInfo(),
   }
 }
 
@@ -55,9 +76,47 @@ function push() {
     win?.webContents.send(CHANNEL.snapshot, snapshot())
   })
 }
-switcher.on('state', push)
-engine.on('change', push)
 localApi.onStatus = push
+
+// A new engine for the current switcher, keeping any loaded layouts (nothing is sent to the
+// switcher; phases come from what's on air).
+function rebuildEngine() {
+  const loaded = engine.slots.map((s) => s.designId)
+  engine.off('change', push)
+  engine.dispose()
+  engine = new Engine(switcher, show.settings, show.designs)
+  engine.restore(loaded)
+  engine.on('change', push)
+  localApi.rebind()
+  push()
+}
+
+async function useConnection(mode: 'simulator' | 'atem', address: string) {
+  const old = switcher
+  old.off('state', push)
+  if (old instanceof SimSwitcher) old.stop()
+  else await old.close()
+
+  if (mode === 'atem' && address) {
+    const atem = new AtemSwitcher(address)
+    atem.on('status', push)
+    atem.on('error', push)
+    // On (re)connect the switcher's real capabilities arrive; rebuild if the SuperSource count changed.
+    atem.on('info', () => {
+      if (switcher === atem && engine.slots.length !== atem.info.superSourceCount) rebuildEngine()
+    })
+    switcher = atem
+    atem.connect()
+  } else {
+    const sim = new SimSwitcher({ fps: 50 })
+    sim.start()
+    switcher = sim
+  }
+  switcher.on('state', push)
+  // Layouts loaded on another switcher don't carry over.
+  engine.slots.forEach((s) => (s.designId = null))
+  rebuildEngine()
+}
 
 function persist() {
   saveShow(show)
@@ -149,15 +208,29 @@ ipcMain.handle(CHANNEL.setOpenAtLogin, (_e, on: boolean) => {
   app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
   push()
 })
-ipcMain.handle(CHANNEL.simCut, (_e, me: number) => switcher.cut(me))
-ipcMain.handle(CHANNEL.simPreview, (_e, me: number, input: number) => switcher.setPreview(me, input))
-ipcMain.handle(CHANNEL.simProgram, (_e, me: number, input: number) => switcher.setProgram(me, input))
-ipcMain.handle(CHANNEL.simKeys, (_e, me: number, on: boolean) => switcher.setKeysOnAir(me, on))
+ipcMain.handle(CHANNEL.setConnection, (_e, mode: 'simulator' | 'atem', address: string) =>
+  ok(async () => {
+    const addr = address.trim()
+    if (mode === 'atem' && !/^\d{1,3}(\.\d{1,3}){3}$/.test(addr)) throw new Error("Enter the switcher's IP address, for example 192.168.10.240")
+    show.settings = { ...show.settings, connection: { mode, address: mode === 'atem' ? addr : show.settings.connection.address } }
+    saveShow(show)
+    await useConnection(mode, addr)
+  }),
+)
+ipcMain.handle(CHANNEL.discover, () => discoverSwitchers(3))
+
+// Simulator panel controls only apply in simulator mode.
+const sim = () => (switcher instanceof SimSwitcher ? switcher : null)
+ipcMain.handle(CHANNEL.simCut, (_e, me: number) => sim()?.cut(me))
+ipcMain.handle(CHANNEL.simPreview, (_e, me: number, input: number) => sim()?.setPreview(me, input))
+ipcMain.handle(CHANNEL.simProgram, (_e, me: number, input: number) => sim()?.setProgram(me, input))
+ipcMain.handle(CHANNEL.simKeys, (_e, me: number, on: boolean) => sim()?.setKeysOnAir(me, on))
 
 app.on('second-instance', () => win?.show())
 app.on('before-quit', () => (quitting = true))
 
 void app.whenReady().then(() => {
+  void useConnection(show.settings.connection.mode, show.settings.connection.address)
   void localApi.listen(show.settings.localApi.port, show.settings.localApi.allowRemote)
   createWindow()
   createTray()

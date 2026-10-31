@@ -13,6 +13,22 @@ export interface AppSnapshot {
   app: { version: string; openAtLogin: boolean }
   // The local API the Companion module connects to.
   companion: { listening: boolean; host: string; port: number; clients: number; error: string | null }
+  connection: ConnectionInfo
+}
+
+export interface ConnectionInfo {
+  mode: 'simulator' | 'atem'
+  address: string
+  status: 'simulator' | 'connecting' | 'connected' | 'disconnected'
+  error: string | null
+  // How late streamed frames went out in the last take (ms), as a timing health check.
+  lastTakeLateMs: { p95: number; max: number } | null
+}
+
+export interface FoundSwitcher {
+  address: string
+  name: string
+  via: 'bonjour' | 'scan'
 }
 
 export type Result = { ok: true } | { ok: false; error: string }
@@ -27,6 +43,8 @@ export interface SdsApi {
   setShortlist(ids: string[]): Promise<void>
   setSettings(settings: ShowSettings): Promise<void>
   setOpenAtLogin(on: boolean): Promise<void>
+  setConnection(mode: 'simulator' | 'atem', address: string): Promise<Result>
+  discover(): Promise<FoundSwitcher[]>
   // Simulator panel controls: play the operator at a switcher panel.
   sim: {
     cut(me: number): Promise<void>
@@ -46,6 +64,8 @@ export const CHANNEL = {
   setShortlist: 'sds:set-shortlist',
   setSettings: 'sds:set-settings',
   setOpenAtLogin: 'sds:set-open-at-login',
+  setConnection: 'sds:set-connection',
+  discover: 'sds:discover',
   simCut: 'sds:sim-cut',
   simPreview: 'sds:sim-preview',
   simProgram: 'sds:sim-program',

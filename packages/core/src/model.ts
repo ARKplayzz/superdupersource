@@ -58,6 +58,8 @@ export interface ShowSettings {
   backgroundInput: number
   // Local API for the Companion module. allowRemote listens on every interface, not just 127.0.0.1.
   localApi: { port: number; allowRemote: boolean }
+  // Which switcher the app drives.
+  connection: { mode: 'simulator' | 'atem'; address: string }
 }
 
 export const DEFAULT_SETTINGS: ShowSettings = {
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: ShowSettings = {
   takeMe: 0,
   backgroundInput: 3020,
   localApi: { port: 8710, allowRemote: false },
+  connection: { mode: 'simulator', address: '' },
 }
 
 export const transitionKey = (dir: Direction, objectId: string): TransitionKey => `${dir}:${objectId}`

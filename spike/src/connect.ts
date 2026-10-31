@@ -42,12 +42,11 @@ export function waitForState(atem: Atem, predicate: () => boolean, timeoutMs = 3
   })
 }
 
-// Wait until `at` (performance.now() ms). setTimeout gets close, then spin for the last 2 ms,
-// because Windows timers are only accurate to a few ms.
+// Wait until `at` (performance.now() ms). Windows timers tick every ~15.6 ms, so setTimeout can
+// wake a whole frame late. Sleep only while more than a tick remains, then yield with setImmediate
+// (accurate to well under 1 ms, measured) so switcher updates are still received meanwhile.
 export async function waitUntil(at: number): Promise<void> {
-  const early = at - performance.now() - 2
+  const early = at - performance.now() - 17
   if (early > 0) await sleep(early)
-  while (performance.now() < at) {
-    // spin
-  }
+  while (performance.now() < at) await new Promise((r) => setImmediate(r))
 }
