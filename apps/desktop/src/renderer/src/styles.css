@@ -1,0 +1,342 @@
+:root {
+  --bg: #121315;
+  --panel: #18191c;
+  --panel-2: #1f2024;
+  --raise: #26282d;
+  --line: #2b2d33;
+  --line-strong: #3a3d44;
+  --text: #e7e8eb;
+  --muted: #8d929b;
+  --faint: #5d626b;
+  --accent: #e8642a; /* the template orange */
+  --accent-soft: rgba(232, 100, 42, 0.14);
+  /* Tally colours mean program and preview, and nothing else uses them. */
+  --pgm: #e5484d;
+  --pvw: #30a46c;
+  --radius: 6px;
+  --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 var(--font);
+  user-select: none;
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- shell ---------- */
+
+.shell {
+  display: grid;
+  grid-template-rows: 38px 1fr;
+  grid-template-columns: 76px 1fr;
+  height: 100%;
+}
+
+.titlebar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 150px 0 14px; /* room for the window controls */
+  -webkit-app-region: drag;
+  border-bottom: 1px solid var(--line);
+}
+
+.titlebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.titlebar .brand img {
+  width: 16px;
+  height: 16px;
+}
+
+.titlebar .brand small {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.titlebar .status {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.chip.pgm {
+  border-color: var(--pgm);
+  color: var(--text);
+}
+.chip.pgm .dot {
+  background: var(--pgm);
+}
+.chip.pvw {
+  border-color: var(--pvw);
+  color: var(--text);
+}
+.chip.pvw .dot {
+  background: var(--pvw);
+}
+.chip.sim .dot {
+  background: var(--accent);
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border-right: 1px solid var(--line);
+}
+
+.rail button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 0 7px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.rail button:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.rail button.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.rail button.active svg {
+  color: var(--accent);
+}
+
+.rail .spacer {
+  flex: 1;
+}
+
+.page {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- common ---------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--raise);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #160a04;
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn.ghost {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+.btn.ghost:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.btn.small {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  outline: none;
+  min-width: 0;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+}
+
+input[type='number'] {
+  font-variant-numeric: tabular-nums;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field > span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.empty {
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--raise);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+canvas.frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: #000;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid var(--bg);
+  border-radius: 6px;
+}
+
+/* Status chips that aren't tally: connected and problem. */
+.chip.ok .dot {
+  background: var(--accent);
+}
+.chip.ok {
+  color: var(--text);
+}
+.chip.warn {
+  border-color: #b7791f;
+  color: var(--text);
+}
+.chip.warn .dot {
+  background: #d69e2e;
+}

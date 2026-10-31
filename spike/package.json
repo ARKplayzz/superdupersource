@@ -1,0 +1,27 @@
+{
+  "name": "superdupersource-spike",
+  "version": "1.0.0",
+  "description": "Phase 0 hardware tests for SuperDuperSource",
+  "scripts": {
+    "discover": "tsx src/discover.ts",
+    "probe": "tsx src/probe.ts",
+    "test:stream": "tsx src/test-stream.ts",
+    "test:macro": "tsx src/test-macro.ts",
+    "test:ranges": "tsx src/test-ranges.ts",
+    "test:connections": "tsx src/test-connections.ts",
+    "test:geometry": "tsx --test src/geometry.test.ts",
+    "typecheck": "tsc"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "atem-connection": "^3.10.3",
+    "bonjour-service": "^1.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}

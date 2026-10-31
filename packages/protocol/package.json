@@ -1,0 +1,8 @@
+{
+  "name": "@sds/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types for the local API between the SuperDuperSource app and its Companion module",
+  "license": "MIT",
+  "types": "index.d.ts"
+}

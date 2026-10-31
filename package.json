@@ -1,0 +1,19 @@
+{
+  "name": "superdupersource",
+  "private": true,
+  "description": "Animated SuperSource transitions for Blackmagic ATEM switchers",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ARKplayzz/superdupersource.git"
+  },
+  "homepage": "https://github.com/ARKplayzz/superdupersource"
+}

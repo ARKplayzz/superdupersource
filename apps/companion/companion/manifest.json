@@ -1,0 +1,26 @@
+{
+  "type": "connection",
+  "id": "kennedys-superdupersource",
+  "name": "kennedys-superdupersource",
+  "shortname": "SuperDuperSource",
+  "description": "Load SuperDuperSource layouts and run animated SuperSource takes on Blackmagic ATEM switchers",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": "git+https://github.com/ARKplayzz/superdupersource.git",
+  "bugs": "https://github.com/ARKplayzz/superdupersource/issues",
+  "maintainers": [
+    {
+      "name": "Andrew (kennedys.nz)"
+    }
+  ],
+  "legacyIds": [],
+  "runtime": {
+    "type": "node22",
+    "api": "nodejs-ipc",
+    "apiVersion": "0.0.0",
+    "entrypoint": "../dist/main.js"
+  },
+  "manufacturer": "kennedys",
+  "products": ["SuperDuperSource"],
+  "keywords": ["ATEM", "SuperSource", "Blackmagic", "animation", "transition"]
+}

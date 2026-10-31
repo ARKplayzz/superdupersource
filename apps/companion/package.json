@@ -1,0 +1,28 @@
+{
+  "name": "companion-module-kennedys-superdupersource",
+  "version": "0.1.0",
+  "description": "Bitfocus Companion module for SuperDuperSource: load layouts and run animated SuperSource takes",
+  "license": "MIT",
+  "main": "dist/main.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "package": "companion-module-build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@companion-module/tools": "^3.2.0",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@companion-module/base": "2.0.4",
+    "ws": "^8.22.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ARKplayzz/superdupersource.git"
+  }
+}

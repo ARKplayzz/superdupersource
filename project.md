@@ -1,0 +1,468 @@
+# SuperDuperSource (.kennedys)
+
+Animated SuperSource transitions for Blackmagic ATEM switchers. Not affiliated with Blackmagic Design.
+
+Draft 3, 31 Oct 2026. Status: building without hardware. The core logic, a simulated switcher and the desktop app run and are tested; the ATEM connection waits for a switcher (§13).
+
+Decided so far:
+
+- Animated designs use the plain Slide 01 background with art behind the boxes. The cutout slides are layout guides.
+- "Active" means a show shortlist.
+- Takes go through Companion / Stream Deck. Takes that bypass the app never animate.
+- 1080p50. Windows only.
+- SuperSource goes to air on ME1 by default, sometimes through ME2.
+- Each design has its own in and out animation per matched source. The out animation targets whatever is on preview.
+- No match means a plain cut. 5 and 6 box layouts are static only in v1.
+- Public release named **SuperDuperSource**: public repo under the MIT licence, signed Windows installer, public download page.
+
+---
+
+## 1. The idea
+
+An ATEM SuperSource is a static layout: up to four boxes over a background. You cut to it and it appears. Apple's keynotes did something better. The presenter is full screen, then the shot shrinks into a side box while the slides grow in beside it, and it reverses on the way out. Nobody sees a cut, only one shot turning into the next.
+
+This app does that on an ATEM. It runs on the control PC beside the switcher, stores a library of layouts, and plays a motion transition whenever a layout goes to air or comes off it.
+
+How a transition works:
+
+1. While the layout sits on preview, it shows its **final form**, so the director sees exactly what they will get.
+2. At the take, the layout is first set to a **start state** that looks identical to what is already on program: for example, the presenter camera box at full size, centred, uncropped. The cut from camera to SuperSource is then invisible.
+3. The boxes animate from the start state to the final form.
+4. Taking it out runs the reverse: the box holding the next source grows to full screen, then the switcher cuts to that source directly. That cut is also invisible.
+
+If nothing on program matches a box in the layout, there is no start state to grow from, so the layout cuts in as a normal SuperSource.
+
+---
+
+## 2. Hardware and environment
+
+| Switcher | SuperSource engines | Boxes per engine | Notes |
+|---|---|---|---|
+| ATEM 2 M/E Production Studio 4K | 1 | 4 | Primary target |
+| ATEM 2 M/E Constellation (HD / 4K) | 1 | 4 | SuperSource borders added in ATEM software 9.6.2 |
+| ATEM 4 M/E Constellation 4K | 2 | 4 each | Two independent engines |
+
+The app reads the switcher's capabilities on connect (engine count, box count, media players, macro slots, video mode), so other SuperSource models should work without special cases.
+
+**Control PC.** Windows, connected to the switcher over Ethernet and USB. The app starts at login, lives in the tray, and opens as a compact window rather than a full-screen app (closer to NZXT CAM than to ATEM Software Control).
+
+**USB doesn't help.** ATEM control goes over the network protocol (UDP 9910). The USB port is for Blackmagic's setup utility, firmware updates and webcam output. It can't be used to detect or control the switcher, so discovery has to happen on the network (see §8.3).
+
+### What a SuperSource box can and can't do
+
+These limits decide what the motion system can offer:
+
+- Per box: enabled, source, position X/Y, size, crop top/bottom/left/right. ATEM Software Control shows ranges of roughly X ±48, Y ±27, size 0.07 to 1.00, crop 0 to 18 (top/bottom) and 0 to 32 (left/right). Confirm on hardware.
+- **No opacity and no rotation.** Boxes can't fade. Motion is limited to position, scale and crop. Crop can fake a wipe-reveal.
+- **Minimum size is 0.07**, so a box can't shrink to nothing. It has to slide offscreen, crop to zero width, or be switched off (a hard cut).
+- **Stacking order is fixed by box number**: box 1 draws on top. Box order can't be changed per animation, but which source sits in which box can (see §5.3).
+- **Art** (the background still) is either behind the boxes or in front of them, keyed by its alpha.
+
+---
+
+## 3. The templates
+
+The nine PNGs in `Supersources-templates/` are 1920×1080 RGBA, with **transparent** cutouts rather than white ones. I measured every cutout from the alpha channel. Using 1 ATEM unit = 60 px (32 units across, 18 down, centre is 0,0), the boxes land on round ATEM numbers, which suggests the slides were built from switcher values:
+
+| Template | Boxes | Box geometry (ATEM units, approximate) |
+|---|---|---|
+| Slide 01 | 0 | Background only |
+| Slide 02 | 2 | Size 0.75, X ±7.5, Y 0, sides cropped (cutout aspect 1.11) |
+| Slide 03 | 3 | Size ~0.70, X −10.5 / 0 / 10.5, sides cropped (portrait, aspect 0.83) |
+| Slide 04 | 4 | Size 0.40, X ±6.4, Y ±3.6 (2×2 grid) |
+| Slide 05 | **5** | Size ~0.33, top row X −10.5 / 0 / 10.5, bottom row X ±5.3 |
+| Slide 06 | **6** | Size ~0.33, 3×2 grid |
+| **Slide 10** | 2 | **A:** size 0.75, X −4, Y 0. **B:** size 0.50, X 12, Y 0, crop L/R ≈ 8 each (portrait, aspect 0.88) |
+| Slide 11 | 3 | A as slide 10. Two side boxes: size 0.25, X 12, Y ±3 |
+| Slide 12 | 4 | A as slide 10. Three side boxes: size 0.25, X 12, Y 4.5 / 0 / −4.5 |
+
+They fall into two natural groups: **Main + side column** (10, 11, 12) and **Grid** (02 to 06).
+
+**How the templates are used.** Slides 02 to 12 are the backgrounds used for static SuperSources today. For animated designs, the background on the switcher is always the plain **Slide 01**, with art behind the boxes, because a baked outline can't follow a box that moves. In the designer, the cutout slide shows as a **guide overlay** only: the boxes snap to its holes, and it never goes to the switcher. If boxes need an edge while they move, use the switcher's SuperSource border on models that have it.
+
+**Slide 10, the first target.** Box A is the slides (PPT) at 75%. Box B is the presenter camera, cropped to a portrait strip on the right. The two transitions to build first:
+
+- **Camera → Slide 10.** The camera fills the screen, then shrinks and slides right into box B while cropping in from the sides. Box A is revealed behind it, or slides in from the left.
+- **Slides → Slide 10.** The slides fill the screen, then shrink left into box A. Box B slides in from the right edge.
+
+Each has its own out animation (to camera, to slides), designed separately rather than as a mirror of the in. The camera auto-tracks, so box B's crop stays fixed and the presenter stays inside the strip.
+
+---
+
+## 4. Problems with the concept as written, and proposed fixes
+
+### 4.1 Takes that bypass the app can't be intercepted
+
+The app learns about a cut only after the switcher has done it. If someone presses CUT on the hardware panel or in ATEM Software Control with the layout on preview, the final form goes to air for one to three frames. The app then snaps to the start state and animates, and the audience sees a flash.
+
+Takes are normally made from Companion / Stream Deck, so the override `SS CUT` / `SS AUTO` buttons cover the usual case. Under the hood those buttons run **smart macros** (§5.2), which the app rewrites in the background. That keeps the motion frame-accurate, and it means a panel macro button can do the same take if the Stream Deck isn't to hand.
+
+**Decided: takes that bypass the app never animate.** The layout cuts or mixes in at final form like a normal SuperSource, with no snap and no flash. The app still tracks it as on air and restores final form after it leaves program.
+
+### 4.2 Animation streamed over the network will stutter
+
+Sending box updates from the PC once per frame means UDP timing, Windows scheduler jitter and switcher frame boundaries all show up as uneven motion. It might be acceptable, or it might not. This is the single biggest technical risk.
+
+**Proposed fix:** bake each animation into a switcher macro, with one frame pause between steps. The switcher runs it in sync with its own frame clock, so motion is frame-accurate whatever the PC is doing. atem-connection (the TypeScript library Companion uses) includes a macro upload transfer, so the app can generate macros and upload them directly. Third-party tools already animate SuperSource boxes with macros, so the approach is proven.
+
+Streaming stays useful for the in-app "test on preview" button and as a fallback. Both paths get tested in phase 0 before anything else is built.
+
+### 4.3 Art layer (resolved)
+
+Art in front of the boxes would hide a full-screen start state behind the background, and baked outlines can't follow moving boxes. Resolved: animated designs use the plain Slide 01 background with **art behind** the boxes, and the cutout slides are guides in the designer only (§3).
+
+One thing left to check in phase 0: whether a moving box looks unfinished without an edge. If it does, use SuperSource borders on the Constellations (ATEM software 9.6.2 or later) and find out whether the Production Studio 4K has them.
+
+### 4.4 Slides 05 and 06 need more boxes than one engine has
+
+One SuperSource engine has four boxes. Slide 05 needs five, slide 06 needs six. Options:
+
+- **4 M/E:** cascade. Engine 2 renders part of the grid, and engine 1 uses it as a box source. This works for static layouts but complicates animation.
+- **Any model:** put extra boxes on upstream DVE keys on the M/E over the SuperSource. The number of DVEs varies by model.
+- Mark them "static only" for now.
+
+Decided: static only in v1. Revisit in phase 6.
+
+### 4.5 Box stacking order
+
+The box that starts full screen must be on top, but which box that is depends on what was on program. For slide 10, box B is on top when coming from the camera, and box A is on top when coming from the slides.
+
+Fix: the designer works with named **objects**, not box numbers. The app assigns box numbers per transition, with the matched object in box 1. With baked macros this costs nothing, because the macro rewrites every box at the snap anyway.
+
+### 4.6 Animating crop and size together wobbles
+
+If X, size and crop each move linearly from start to end, the visible edges of the box don't move linearly. An edge can drift backwards before going forwards. Fix: interpolate the **visible rectangle** (left, right, top and bottom edges on screen) plus the image scale, then solve for the ATEM X/Y/size/crop values each frame.
+
+### 4.7 Matching through M/Es isn't exact
+
+"ME2 showing Camera 1" only looks like Camera 1 if ME2 has no upstream keys on air. If ME2 has a lower third keyed on, the invisible cut drops the key. Matching rules are in §6.
+
+### 4.8 Changing a layout while it's on air
+
+Loading a different design into an engine that is on program changes the program output instantly. The app should block that, or, on a 4 M/E, load into the idle engine instead (§7, A/B engines).
+
+### 4.9 Knowing when a layout is "on air"
+
+SuperSource can reach program through ME1 directly, through ME2 into ME1, or through an aux. Use the switcher's source tally for the SuperSource input rather than just ME1's program bus.
+
+### 4.10 Shared switcher resources
+
+Media players, media pool slots and macro slots are shared with the rest of the show. The app should use only a range reserved in Setup (for example macros 80 to 99, stills 15 to 20) and never touch anything outside it.
+
+### 4.11 4K video modes
+
+The templates are 1080. If a switcher runs in 2160p, stills must be 3840×2160. Box geometry is resolution-independent because ATEM units are normalised, but the app should warn when a still doesn't match the video mode.
+
+### 4.12 Smaller items
+
+- **Name (decided: SuperDuperSource).** "SuperSource" is still Blackmagic's feature name, so the app describes itself as "for Blackmagic ATEM switchers", says "not affiliated with Blackmagic Design" on the download page and in the About box, and uses no Blackmagic logos. In the UI, "SuperSource" only ever means the switcher feature.
+- **Code signing (decided: sign it).** Azure Trusted Signing is the first option to check: cost, and whether an individual in NZ can get verified. If it can't, fall back to an OV certificate from a commercial CA on a hardware token or cloud HSM. Signing runs in the release workflow, so every installer and auto-update is signed.
+- **Licence (decided: MIT).** Covers the app, the core package and the Companion module, which also keeps the module eligible for Bitfocus's module list.
+- **Connection limit.** Companion's ATEM module, ATEM Software Control and this app each hold a connection to the switcher. ATEMs limit concurrent clients, so check how many the target models allow.
+
+---
+
+## 5. How it runs
+
+### 5.1 States per engine
+
+```
+            load design
+  IDLE ───────────────────▶ ARMED (final form, on preview or unused)
+                                │
+                     take IN    │  (smart macro / Companion / app)
+                                ▼
+                      SNAP to start state ─▶ CUT ─▶ ANIMATING IN
+                                                        │
+                                                        ▼
+                                                     ON AIR (final form)
+                                                        │
+                                          take OUT      │
+                                                        ▼
+                         ANIMATING OUT ─▶ CUT to target ─▶ RESTORE final form ─▶ ARMED
+```
+
+- After any exit, the layout returns to final form within a frame of leaving program, so it's ready for preview again.
+- The take OUT target is whatever is on preview. If it matches no box, it falls back to a plain cut or mix.
+- Takes run on ME1 by default. When the layout is built on ME2 and fed into ME1, the take runs on whichever M/E has the layout on its preview. Setup can override this.
+
+### 5.2 Smart macros
+
+The app reserves a few macro slots per engine and keeps them current:
+
+| Slot | Content |
+|---|---|
+| `SS1 IN` | Snap, cut, and the animation for **whatever is on program right now** |
+| `SS1 OUT` | Animation to **whatever is on preview right now**, cut, restore |
+| `SS1 AUTO` | IN or OUT depending on whether SS1 is on air |
+
+Whenever program, preview or the loaded design changes, the app regenerates and re-uploads the affected macros. Upload size is a few KB, so it should take well under a second. Phase 0 measures the real time.
+
+At 1080p50 one frame is 20 ms, so a 700 ms move is 35 macro steps.
+
+What this gets:
+
+- Companion's `SS CUT` / `SS AUTO` buttons run these macros, so the motion is frame-accurate.
+- **If the app crashes, the last-uploaded macros still work.**
+- Panel macro buttons can do the same take as a backup.
+
+Risk: someone presses `SS1 IN` in the half-second after program changed, before the re-upload finishes. Mitigation: re-upload on preview/program change is fast, and the app can show a "macro stale" warning in Companion.
+
+### 5.3 Box allocation per transition
+
+For every design and every object that can be matched, the app generates:
+
+- IN from that object full screen
+- OUT to that object full screen
+
+and assigns box numbers so the full-screen object is box 1. Slide 10 gets four transitions: IN from camera, IN from slides, OUT to camera, OUT to slides.
+
+Each of these is designed on its own. OUT to camera doesn't have to be IN from camera played backwards: it can use different timing, easing and paths for the other boxes. The designer starts each new transition from a sensible default (the reverse of the matching IN, or slide off the nearest edge) so you only edit the ones you care about.
+
+---
+
+## 6. Source matching rules
+
+The program source **P** is what's on air before the take. **S** is an object's source in the layout. A match picks which object starts full screen.
+
+| Case | Match? |
+|---|---|
+| P = S (same input) | Yes |
+| P is ME*n*, S is input *I*, ME*n* program = *I*, no USKs on air in ME*n* | Yes |
+| P is input *I*, S is ME*n*, ME*n* program = *I*, no USKs on air | Yes |
+| P and S are both M/Es that resolve to the same input, no keys | Yes |
+| Resolves to the same input, but USKs are on air in that M/E | Configurable: animate (keys drop at the cut), or don't animate. Default: don't, and show why in the app |
+| ME*n* is mid-transition | No |
+| P is a SuperSource (same engine, another design) | Layout morph, see §7 |
+| Nothing matches | Plain cut, no animation |
+| More than one object matches | Use the designer's priority order. Default: largest final box |
+
+DSKs on ME1 are downstream of everything and stay put through the animation. Upstream keys on ME1 follow the "next transition" selection as normal, so the app warns if a key is tied to the take.
+
+The same rules decide the OUT animation, using the preview source instead of program.
+
+---
+
+## 7. Further suggestions
+
+- **Test on preview.** A button in the Design tab plays the animation on the engine while it's on preview only (blocked when on air). Watch it on the multiview.
+- **Auto-create boxes from cutouts.** Drop in a PNG, and the app reads the alpha channel and offers boxes snapped to each hole (what produced the table in §3).
+- **Roles instead of raw inputs.** Designs refer to roles like `Presenter`, `Slides` or `Wide`. Setup maps roles to inputs per venue, so a design built at one site works at another without editing.
+- **Layout morph (Keynote "Magic Move").** On the same engine, going from slide 10 to slide 11 while on air: box A stays put, the side box splits into two. A big visual payoff, and the same interpolation code.
+- **A/B engines on the 4 M/E.** While SS1 is on air, the next design loads into SS2. Taking SS2 can morph between them if the backgrounds match.
+- **Show files.** Export and import a show (designs, groups, stills, role names) as one file for moving between venues and switchers.
+- **Offline design mode.** Design without a switcher connected, using placeholder colours for sources.
+- **Take log.** A short history of what went to air and which transition ran, for spotting problems after a show.
+
+---
+
+## 8. The app
+
+Small, resizable window (about 1100×700, minimum 960×600). Icon rail on the left with three tabs. Dark UI. A connection and tally strip along the top shows the switcher, its video mode, and each engine's state (idle / preview / program).
+
+### 8.1 SuperSources tab (gallery)
+
+- **Grid (centre):** the **show shortlist**, the designs active for today's show. There's no limit on how many. Each card is a thumbnail rendered from the background still with source labels drawn into each box. A card shows its state (red = program, green = preview, plain = not loaded), which engine it's loaded in, and which transitions are available right now ("IN from Presenter", "no match").
+- **Library (right):** all designs, in collapsible groups. Drag a design into the grid to add it to the shortlist. Groups grow and shrink as designs are added or removed.
+- Click a shortlisted card to load it into a free engine and put that engine on preview. "Free" means not on air. On a 2 M/E there's one engine, so loading is blocked while the current layout is on program. On a 4 M/E it uses whichever engine isn't on air.
+
+### 8.2 Design tab
+
+- **Canvas:** the background still at 16:9, with draggable and resizable boxes. An optional guide overlay (one of the cutout slides) sits on top for alignment and never goes to the switcher. Snaps to guide cutouts, the centre, other boxes, and round ATEM values.
+- **Inspector:** X, Y, size and crop in ATEM units, with pixel values alongside. Source or role picker. Matching priority.
+- **Objects list:** names and sources. No box numbers, which the app assigns (§4.5).
+- **Transition picker:** one tab per transition the design can do, generated from its objects: "IN from Presenter", "IN from Slides", "OUT to Presenter", "OUT to Slides". Picking one shows its timeline and plays it on the canvas.
+- **Motion,** per object, within the selected transition:
+  - The matched object's start (IN) or end (OUT) is fixed at full screen.
+  - Every other object: offscreen left/right/top/bottom, scale from centre, crop wipe from an edge, or already in place.
+  - Duration, delay (for staggering), easing (presets plus a curve editor).
+- **Timeline:** one track per object, so the stagger is visible.
+- **Test on preview** (§7).
+
+### 8.3 Setup tab
+
+- **Switcher:** list of ATEMs found by Bonjour/mDNS (`_blackmagic._tcp`, TXT `class=AtemSwitcher`, the same query Companion uses), plus manual IP. Shows model, firmware, protocol version, video mode, engine count, media players and macro slots.
+- **Reserved resources:** macro slot range, media pool still range, which media player(s) to use for backgrounds.
+- **Roles:** role → input mapping, using input names pulled from the switcher.
+- **Behaviour:** which M/E takes run on (default ME1, §5.1), whether to animate when keys are on air (§6).
+- **Companion:** local API port, connection status, connected clients.
+- **App:** start with Windows, start minimised to tray, check for updates.
+
+---
+
+## 9. Companion module
+
+Built (`apps/companion`, module id `kennedys-superdupersource`). It talks to the **app** over a local WebSocket, not to the switcher: the app owns timing and state, and Companion is a remote with tally. Targets Companion module API 2.0, so it runs on Companion 4.3 and later.
+
+**Link.** The app listens on port 8710, on 127.0.0.1 only unless "Allow Companion on another computer" is on in Setup. The messages are typed in `packages/protocol`. The app pushes state whenever something a button shows changes, and always before it answers a request, so a button never shows a finished take as still running. The module reconnects every 2 seconds if the app goes away.
+
+**Presets:**
+
+- **Takes:** `SS CUT` (animated take in or out; a plain cut when nothing matches), `SS AUTO` (the same, but a mix when nothing matches), and a *Next take* display button. Take buttons go orange when an animated take is ready, grey when only a plain cut or mix is possible, white while a take runs.
+- **Layouts:** one group per library group, shortlisted layouts first. Press loads the layout into a free SuperSource and puts it on preview. Green on preview, red on program, grey when loaded but on neither.
+
+**Actions:** load layout, SS CUT, SS AUTO. **Feedbacks:** layout tally, take ready (animated / plain / either), take running. **Variables:** `next_take`, `next_detail`, `next_animated`, `switcher`, and `ssN_layout` / `ssN_state` per SuperSource.
+
+Presets and dropdowns are rebuilt when the library changes (a layout added, renamed or regrouped), not on every tally change.
+
+Tested end to end against the app's real server with the simulator underneath (load, IN, OUT, SS AUTO mixing, errors, reconnecting, port clashes), and against the built Electron app. Not yet tested inside Companion itself. `npm run build` then `npm run package` in `apps/companion` produces the `.tgz` Companion imports.
+
+Once smart macros exist (§5.2), the take buttons could also be plain "run macro" buttons on Companion's own ATEM module, which would keep working with the app closed, minus the live feedback.
+
+---
+
+## 10. Data model (draft)
+
+```jsonc
+{
+  "id": "slide-10",
+  "name": "Slide 10: Slides + presenter",
+  "group": "Main + side column",
+  "background": { "file": "Slide_01.png", "mediaPoolSlot": 16, "artLayer": "background" },
+  "guide": "Slide_10.png",
+  "objects": [
+    {
+      "id": "A", "name": "Slides", "source": { "role": "Slides" },
+      "final": { "x": -4.0, "y": 0.0, "size": 0.75, "crop": { "t": 0, "b": 0, "l": 0, "r": 0 } },
+      "matchPriority": 2
+    },
+    {
+      "id": "B", "name": "Presenter", "source": { "role": "Presenter" },
+      "final": { "x": 12.0, "y": 0.0, "size": 0.5, "crop": { "t": 0, "b": 0, "l": 8.0, "r": 8.0 } },
+      "matchPriority": 1
+    }
+  ],
+  // one entry per (direction, matched object); the matched object is full screen at the start (in) or end (out)
+  "transitions": {
+    "in:B": {                       // IN from Presenter full screen
+      "B": { "durationMs": 700, "delayMs": 0,  "easing": "easeInOutCubic" },
+      "A": { "from": "in-place",       "durationMs": 0 }      // revealed as B shrinks
+    },
+    "in:A": {                       // IN from Slides full screen
+      "A": { "durationMs": 700, "delayMs": 0,  "easing": "easeInOutCubic" },
+      "B": { "from": "offscreen-right", "durationMs": 600, "delayMs": 120, "easing": "easeOutCubic" }
+    },
+    "out:B": {                      // OUT to Presenter (on preview)
+      "B": { "durationMs": 600, "delayMs": 0,  "easing": "easeInOutCubic" },
+      "A": { "to": "offscreen-left",   "durationMs": 500, "delayMs": 0, "easing": "easeInCubic" }
+    },
+    "out:A": {                      // OUT to Slides (on preview)
+      "A": { "durationMs": 600, "delayMs": 0,  "easing": "easeInOutCubic" },
+      "B": { "to": "offscreen-right",  "durationMs": 400, "delayMs": 0, "easing": "easeInCubic" }
+    }
+  }
+}
+```
+
+Transitions that are missing fall back to the default (the reverse of the matching IN, or slide off the nearest edge).
+
+---
+
+## 11. Tech stack (proposed)
+
+| Part | Choice | Why |
+|---|---|---|
+| Desktop app | Electron + TypeScript | atem-connection is a Node library, and the Companion module is Node too, so both share one core package |
+| Switcher control | atem-connection | Used by Companion. Covers SuperSource, tally, media pool upload and macro upload |
+| UI | React, small component set, no UI kit | Compact custom UI |
+| Animation timing | Baked macros on the switcher. Streaming from a worker thread as fallback | §4.2 |
+| Companion module | companion-module-base (TypeScript) | Standard |
+| Installer and updates | electron-builder (NSIS) + electron-updater | Auto-update from releases |
+| Download page | Static site on CapRover, auto-built from GitHub | Same pipeline as other kennedys.nz apps |
+
+Repo layout:
+
+```
+superdupersource/
+  packages/core/        design model, geometry, matching rules, take planning, engine, simulator (built)
+  apps/desktop/         Electron app; its renderer also runs in a plain browser on the simulator (built)
+  apps/companion/       Companion module (built)
+  packages/protocol/    types for the app <-> Companion link (built)
+  apps/site/            download page (superdupersource.kennedys.nz)
+  spike/                phase 0 hardware tests (built, not yet run)
+  Supersources-templates/  backgrounds and layout guides
+```
+
+Alternative considered: a .NET app using Blackmagic's official ATEM SDK. It's well documented for SuperSource, but the SDK is Windows COM and depends on ATEM Software Control being installed, and none of it can be shared with the Companion module.
+
+---
+
+## 12. Download page
+
+`superdupersource.kennedys.nz`, a single static page, deployed by CapRover from the GitHub repo on push.
+
+- What it does, in one sentence, plus a short clip of the slide 10 transition (camera to layout and back) as the first thing on the page.
+- Download button for the latest Windows installer, with version and date. Pulled from GitHub Releases at build time.
+- Companion module download, and later a link once it's in Companion's built-in module list (Bitfocus accepts public modules by submission).
+- "Not affiliated with Blackmagic Design" in the footer.
+- Supported switchers, requirements, and a changelog.
+- Designed to match the app. Same anti-slop rules as §14.
+
+The repo is public, so installers live on GitHub Releases. electron-updater reads the same releases for auto-update.
+
+---
+
+## 13. Roadmap
+
+**Phase 0: hardware spike.** Answer these on the 2 M/E Production Studio 4K before building anything else. The scripts are in `spike/`, and `spike/README.md` explains how to run them and has a results sheet to fill in:
+
+1. Stream box updates once per frame from Node. Record the program output and check for dropped or doubled steps.
+2. Generate a macro with per-frame steps, upload it, run it. Smoothness? Upload time? Size limit per macro?
+3. Confirm box 1 draws on top, and the exact coordinate and crop ranges.
+4. Do moving boxes need a border over the plain Slide 01 background? Does the Production Studio 4K have SuperSource borders?
+5. Does mDNS discovery work on the venue network?
+6. How many simultaneous control connections does each model allow?
+
+**Building without hardware (in progress, started 31 Oct 2026).** No switcher until the next job, so everything that doesn't need one is built against a simulated switcher. The engine talks to a `Switcher` interface; `SimSwitcher` implements it on its own frame clock, running ops exactly as a macro would (everything up to a wait in one frame). The ATEM adapter implements the same interface later. Done so far:
+
+- `packages/core`: design model, screen-space interpolation, per-source IN/OUT transitions with defaults (OUT reverses a custom IN), source matching (§6), take plans as frame-by-frame ops, the engine state machine (load, next take, take, bypass takes never animate), the simulator, and starter designs from slides 10, 11, 12, 02, 03 and 04. 28 tests.
+- `apps/desktop`: tray app with the SuperSources, Design and Setup tabs, plus a Simulator view standing in for the multiview and panel. Design tab: drag, resize and crop boxes, fit a box to a guide cutout in one click, and edit and play every IN/OUT transition.
+
+**Phase 1: slide 10 end to end on hardware.** Run phase 0, then write the ATEM adapter: connection and discovery, tally, and running take ops (streamed first; macros once the format is known, see below). Used in a real show.
+
+Found while building: a take macro can't be made by *recording*, because recording executes each command live, cut included. Smart macros need the macro binary format so the app can write them directly. The phase 0 macro test saves downloaded macro bytes for exactly this; until then, takes stream from the PC.
+
+**Phase 2: Design tab.** Mostly built on the simulator. Left: test on preview against a real switcher, snapping while dragging to cutout edges.
+
+**Phase 3: Gallery.** Library, groups, shortlist and roles are built. Left: media pool upload of backgrounds.
+
+**Phase 4: Companion module.** Built and tested against the app; still to be tried inside Companion.
+
+**Phase 5: Distribution.** Code-signing setup (start the verification early, it can take weeks), signed installer, auto-update, download page at superdupersource.kennedys.nz.
+
+**Phase 6: Extras.** Layout morph, 4 M/E A/B engines, 5 and 6 box layouts, show files.
+
+---
+
+## 14. Writing and UI rules
+
+- Every UI string, doc and page goes through `unslop` and `human-voice-check` before it ships.
+- UI: no gradient blobs, no emoji as icons, no generic card grids with icon + title + blurb. Show real data: source names, tally state, ATEM numbers in tabular figures.
+- Colour: tally red and green mean program and preview everywhere, and nothing else uses them. One accent colour, possibly taken from the template orange.
+- Microcopy says what will happen ("Loads Slide 10 into SuperSource 1 and puts it on preview"), not what the feature is called.
+
+---
+
+## 15. Open questions
+
+**Answered**
+
+- **Q1.** Art layer: behind. Animated designs use the Slide 01 background; cutout slides are for static layouts and serve as guides.
+- **Q2.** "Active" means a show shortlist.
+- **Q3.** Takes go through Companion / Stream Deck.
+- **Q4.** 1080p50.
+- **Q5.** The tracking camera auto-tracks, so box B's crop stays fixed.
+- **Q6.** Both routes happen. ME1 is the default.
+- **Q7.** Use defaults: macros 80–99, media pool stills 15–20, media player 2. All changeable in Setup.
+- **Q8.** Public: public repo, GitHub Releases, public download page.
+- **Q9.** Windows only.
+- **Q10.** Takes that bypass the app never animate.
+- **Q11.** OUT animates towards whatever is on preview, and each preview source can have its own out animation (as each program source has its own in).
+- **Q12.** 5 and 6 box layouts are static only in v1.
+- **Q13.** No match: plain cut.
+
+- **Q14.** Name: SuperDuperSource (.kennedys).
+- **Q15.** Sign the Windows installer.
+- **Q16.** MIT licence.
+
+All questions are answered, so the next step is the phase 0 hardware spike (§13).
