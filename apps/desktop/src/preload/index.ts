@@ -17,6 +17,8 @@ const api: SdsApi = {
   setOpenAtLogin: (on) => ipcRenderer.invoke(CHANNEL.setOpenAtLogin, on),
   setConnection: (mode, address) => ipcRenderer.invoke(CHANNEL.setConnection, mode, address),
   discover: () => ipcRenderer.invoke(CHANNEL.discover),
+  checkForUpdates: () => ipcRenderer.invoke(CHANNEL.checkForUpdates),
+  installUpdate: () => ipcRenderer.invoke(CHANNEL.installUpdate),
   sim: {
     cut: (me) => ipcRenderer.invoke(CHANNEL.simCut, me),
     setPreview: (me, input) => ipcRenderer.invoke(CHANNEL.simPreview, me, input),

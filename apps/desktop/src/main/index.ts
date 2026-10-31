@@ -5,6 +5,7 @@ import { Design, Engine, ShowSettings, SimSwitcher } from '@sds/core'
 import { AppSnapshot, CHANNEL, ConnectionInfo, Result } from '../shared/api'
 import { LocalApi } from './localApi'
 import { loadShow, saveShow } from './store'
+import { Updates } from './updates'
 
 // One copy only: a second launch just brings the window back.
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -30,6 +31,8 @@ const localApi = new LocalApi({
   settings: () => show.settings,
   version: app.getVersion(),
 })
+
+const updates = new Updates()
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -60,7 +63,7 @@ function snapshot(): AppSnapshot {
     designs: show.designs,
     shortlist: show.shortlist,
     settings: show.settings,
-    app: { version: app.getVersion(), openAtLogin: app.getLoginItemSettings().openAtLogin },
+    app: { version: app.getVersion(), openAtLogin: app.getLoginItemSettings().openAtLogin, update: updates.state },
     companion: localApi.status,
     connection: connectionInfo(),
   }
@@ -77,6 +80,7 @@ function push() {
   })
 }
 localApi.onStatus = push
+updates.onChange = push
 
 // A new engine for the current switcher, keeping any loaded layouts (nothing is sent to the
 // switcher; phases come from what's on air).
@@ -218,6 +222,8 @@ ipcMain.handle(CHANNEL.setConnection, (_e, mode: 'simulator' | 'atem', address: 
   }),
 )
 ipcMain.handle(CHANNEL.discover, () => discoverSwitchers(3))
+ipcMain.handle(CHANNEL.checkForUpdates, () => updates.check())
+ipcMain.handle(CHANNEL.installUpdate, () => updates.install(() => (quitting = true)))
 
 // Simulator panel controls only apply in simulator mode.
 const sim = () => (switcher instanceof SimSwitcher ? switcher : null)
@@ -231,6 +237,7 @@ app.on('before-quit', () => (quitting = true))
 
 void app.whenReady().then(() => {
   void useConnection(show.settings.connection.mode, show.settings.connection.address)
+  updates.start()
   void localApi.listen(show.settings.localApi.port, show.settings.localApi.allowRemote)
   createWindow()
   createTray()

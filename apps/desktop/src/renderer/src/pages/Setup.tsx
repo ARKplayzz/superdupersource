@@ -138,7 +138,8 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
           <input type="checkbox" checked={snap.app.openAtLogin} onChange={(e) => void window.sds.setOpenAtLogin(e.target.checked)} />
           Start with Windows, in the tray
         </label>
-        <p className="muted small-text num">Version {snap.app.version}. Closing the window keeps it running in the tray.</p>
+        <UpdateRow snap={snap} />
+        <p className="muted small-text">Closing the window keeps it running in the tray.</p>
       </Section>
     </div>
   )
@@ -272,5 +273,40 @@ function SwitcherSection({ snap }: { snap: AppSnapshot }) {
         switch is best.
       </p>
     </Section>
+  )
+}
+
+function UpdateRow({ snap }: { snap: AppSnapshot }) {
+  const u = snap.app.update
+  const when = u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString() : null
+  const text: Record<typeof u.status, string> = {
+    dev: 'Updates are off in development builds.',
+    idle: 'Checks for updates shortly after starting, then every 6 hours.',
+    checking: 'Checking for updates…',
+    none: `Up to date${when ? ` (checked ${when})` : ''}.`,
+    downloading: `Downloading ${u.version ?? 'an update'}${u.percent ? `: ${u.percent}%` : '…'}`,
+    ready: `Version ${u.version} is ready. It installs next time the app quits, or restart now.`,
+    error: `Couldn't check for updates: ${u.error ?? 'unknown error'}`,
+  }
+  return (
+    <div className="update-row">
+      <div>
+        <div className="num">Version {snap.app.version}</div>
+        <div className={`small-text ${u.status === 'error' ? 'warn-text' : 'muted'}`}>{text[u.status]}</div>
+      </div>
+      {u.status === 'ready' ? (
+        <button
+          className="btn primary small"
+          title="The switcher keeps its picture. Companion buttons pause until the app is back."
+          onClick={() => void window.sds.installUpdate()}
+        >
+          Restart and update
+        </button>
+      ) : (
+        <button className="btn small" disabled={u.status === 'dev' || u.status === 'checking' || u.status === 'downloading'} onClick={() => void window.sds.checkForUpdates()}>
+          Check now
+        </button>
+      )}
+    </div>
   )
 }

@@ -75,6 +75,28 @@ npm run package -w companion-module-kennedys-superdupersource
 
 That writes `apps/companion/kennedys-superdupersource-0.1.0.tgz`. In Companion, import it under Modules, add a *SuperDuperSource* connection, and drag buttons from its presets. [The module's help page](apps/companion/companion/HELP.md) covers the buttons.
 
+## Releases
+
+A release is cut by tagging a version:
+
+```bash
+npm run bump 0.2.0
+```
+
+```bash
+git commit -am "v0.2.0" && git tag v0.2.0 && git push --follow-tags
+```
+
+The tag starts `.github/workflows/release.yml`, which runs the tests, builds the Windows installer and the Companion module, and publishes both as a GitHub release. The download page and the app's auto-update read that release. To build the installer locally instead:
+
+```bash
+npm run dist -w @sds/desktop
+```
+
+It lands in `apps/desktop/release/`. Builds are unsigned until the Azure Trusted Signing secrets are added to the repo; `apps/desktop/electron-builder.config.cjs` lists them.
+
+Installed copies check for updates about 15 seconds after starting and every 6 hours. An update downloads in the background and installs when the app quits, or when you press Restart and update in Setup. The app never restarts on its own.
+
 ## Download page
 
 `apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slide 10 transitions with the app's own renderer, and `/demo` is the desktop UI running on the simulator in the browser. It lists the latest GitHub release when there is one.

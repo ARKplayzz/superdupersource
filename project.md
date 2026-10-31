@@ -436,7 +436,13 @@ Found while building: a take macro can't be made by *recording*, because recordi
 
 **Phase 4: Companion module.** Built and tested against the app; still to be tried inside Companion.
 
-**Phase 5: Distribution.** Code-signing setup (start the verification early, it can take weeks), signed installer, auto-update, download page at superdupersource.kennedys.nz.
+**Phase 5: Distribution (built 31 Oct 2026, except signing).**
+
+- NSIS installer from electron-builder 26 (`npm run dist -w @sds/desktop`): per-user install, choice of folder, desktop shortcut, MIT licence page. 128 MB, almost all of it Electron.
+- Auto-update with electron-updater from GitHub releases: checks 15 s after start and every 6 hours, downloads in the background, installs on quit or when the operator presses Restart and update. It never restarts by itself, because that would take the Companion buttons away mid-show.
+- `.github/workflows/release.yml`: on a `v*` tag it checks the tag matches the app and module versions, runs tests and type checks, builds the installer and the Companion `.tgz`, and publishes a GitHub release with the `.exe`, `.blockmap`, `latest.yml` and `.tgz`. `npm run bump <version>` keeps the versions in step.
+- Smoke-tested the packaged app: it starts, serves the Companion API, loads atem-connection's worker inside the archive in ATEM mode, and the window renders with the preload bridge working.
+- Signing: wired for Azure Trusted Signing through `azureSignOptions`, switched on only when the `AZURE_*` secrets exist. Still to do: the Azure account and identity verification, then add the secrets. Until then installs show a SmartScreen warning.
 
 **Phase 6: Extras.** Layout morph, 4 M/E A/B engines, 5 and 6 box layouts, show files.
 

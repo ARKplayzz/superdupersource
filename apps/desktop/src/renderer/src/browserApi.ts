@@ -42,7 +42,7 @@ export function createBrowserApi(): SdsApi {
       designs: show.designs,
       shortlist: show.shortlist,
       settings: show.settings,
-      app: { version: 'browser', openAtLogin: false },
+      app: { version: 'browser', openAtLogin: false, update: { status: 'dev' } },
       companion: { listening: false, host: '', port: show.settings.localApi.port, clients: 0, error: 'Not available in the browser version' },
       connection: { mode: 'simulator', address: '', status: 'simulator', error: null, lastTakeLateMs: null },
     })
@@ -112,6 +112,8 @@ export function createBrowserApi(): SdsApi {
     setConnection: async (mode) =>
       mode === 'atem' ? { ok: false, error: 'The browser version only runs the simulator. Install the Windows app to connect to an ATEM.' } : { ok: true },
     discover: async () => [],
+    checkForUpdates: async () => {},
+    installUpdate: async () => false,
     sim: {
       cut: async (me) => switcher.cut(me),
       setPreview: async (me, input) => switcher.setPreview(me, input),

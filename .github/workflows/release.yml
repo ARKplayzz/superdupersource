@@ -1,0 +1,78 @@
+# Builds and publishes a release when a version tag is pushed (npm run bump, then push the tag).
+# The release carries what the download page and the app's auto-update read:
+#   SuperDuperSource-Setup-<version>.exe (+ .blockmap, latest.yml) and the Companion module .tgz.
+# Signing switches on once the AZURE_* secrets exist (see apps/desktop/electron-builder.config.cjs).
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+        env:
+          # electron-builder fetches its own Electron; the npm package's binary isn't needed.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Check the tag matches the app and module versions
+        shell: bash
+        run: |
+          app=$(node -p "require('./apps/desktop/package.json').version")
+          mod=$(node -p "require('./apps/companion/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$app" ] || [ "$app" != "$mod" ]; then
+            echo "Tag $GITHUB_REF_NAME, app $app, module $mod: run npm run bump <version> and tag again."
+            exit 1
+          fi
+
+      - name: Test
+        run: npm test
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build the installer
+        run: npm run dist -w @sds/desktop
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+          AZURE_PUBLISHER_NAME: ${{ secrets.AZURE_PUBLISHER_NAME }}
+
+      - name: Build the Companion module
+        run: |
+          npm run build -w companion-module-kennedys-superdupersource
+          npm run package -w companion-module-kennedys-superdupersource
+
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          signed=$([ -n "${{ secrets.AZURE_CLIENT_ID }}" ] && echo "signed" || echo "unsigned: Windows SmartScreen will warn on install, choose More info, then Run anyway")
+          gh release create "$GITHUB_REF_NAME" \
+            --title "SuperDuperSource $version" \
+            --generate-notes \
+            --notes "Windows installer ($signed) and the Companion module for Companion 4.3 or later. Not yet tested on a real ATEM switcher." \
+            "apps/desktop/release/SuperDuperSource-Setup-$version.exe" \
+            "apps/desktop/release/SuperDuperSource-Setup-$version.exe.blockmap" \
+            "apps/desktop/release/latest.yml" \
+            "apps/companion/kennedys-superdupersource-$version.tgz"

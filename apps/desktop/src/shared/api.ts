@@ -10,10 +10,18 @@ export interface AppSnapshot {
   designs: Design[]
   shortlist: string[]
   settings: ShowSettings
-  app: { version: string; openAtLogin: boolean }
+  app: { version: string; openAtLogin: boolean; update: UpdateInfo }
   // The local API the Companion module connects to.
   companion: { listening: boolean; host: string; port: number; clients: number; error: string | null }
   connection: ConnectionInfo
+}
+
+export interface UpdateInfo {
+  status: 'dev' | 'idle' | 'checking' | 'none' | 'downloading' | 'ready' | 'error'
+  version?: string
+  percent?: number
+  error?: string
+  checkedAt?: number
 }
 
 export interface ConnectionInfo {
@@ -45,6 +53,8 @@ export interface SdsApi {
   setOpenAtLogin(on: boolean): Promise<void>
   setConnection(mode: 'simulator' | 'atem', address: string): Promise<Result>
   discover(): Promise<FoundSwitcher[]>
+  checkForUpdates(): Promise<void>
+  installUpdate(): Promise<boolean>
   // Simulator panel controls: play the operator at a switcher panel.
   sim: {
     cut(me: number): Promise<void>
@@ -66,6 +76,8 @@ export const CHANNEL = {
   setOpenAtLogin: 'sds:set-open-at-login',
   setConnection: 'sds:set-connection',
   discover: 'sds:discover',
+  checkForUpdates: 'sds:check-updates',
+  installUpdate: 'sds:install-update',
   simCut: 'sds:sim-cut',
   simPreview: 'sds:sim-preview',
   simProgram: 'sds:sim-program',

@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "bump": "node scripts/bump.mjs"
   },
   "repository": {
     "type": "git",
