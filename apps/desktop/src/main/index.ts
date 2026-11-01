@@ -5,7 +5,7 @@ import { Design, Engine, ShowSettings, SimSwitcher } from '@sds/core'
 import { AppSnapshot, CHANNEL, ConnectionInfo, Result } from '../shared/api'
 import { LocalApi } from './localApi'
 import { downloadModule } from './module'
-import { loadShow, saveShow } from './store'
+import { flushShow, loadShow, saveShow } from './store'
 import { Updates } from './updates'
 
 // One copy only: a second launch just brings the window back.
@@ -219,7 +219,7 @@ ipcMain.handle(CHANNEL.setConnection, (_e, mode: 'simulator' | 'atem', address: 
     const addr = address.trim()
     if (mode === 'atem' && addr && !/^\d{1,3}(\.\d{1,3}){3}$/.test(addr)) throw new Error("Enter the switcher's IP address, for example 192.168.10.240")
     show.settings = { ...show.settings, connection: { mode, address: mode === 'atem' ? addr : show.settings.connection.address } }
-    saveShow(show)
+    saveShow(show, true)
     await useConnection(mode, addr)
   }),
 )
@@ -236,7 +236,10 @@ ipcMain.handle(CHANNEL.simProgram, (_e, me: number, input: number) => sim()?.set
 ipcMain.handle(CHANNEL.simKeys, (_e, me: number, on: boolean) => sim()?.setKeysOnAir(me, on))
 
 app.on('second-instance', () => win?.show())
-app.on('before-quit', () => (quitting = true))
+app.on('before-quit', () => {
+  quitting = true
+  flushShow()
+})
 
 void app.whenReady().then(() => {
   void useConnection(show.settings.connection.mode, show.settings.connection.address)

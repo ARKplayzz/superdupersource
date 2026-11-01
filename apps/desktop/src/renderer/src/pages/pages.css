@@ -717,22 +717,22 @@
   font-weight: 600;
 }
 
-/* A small padlock: shackle on top of a body. */
+/* A small padlock: a shackle centred on top of a body, on whole pixels so it stays sharp. */
 .lock {
   position: relative;
   flex: none;
-  width: 9px;
-  height: 11px;
+  width: 10px;
+  height: 12px;
 }
 
 .lock::before {
   content: '';
   position: absolute;
-  left: 1.5px;
+  left: 2px;
   top: 0;
   width: 6px;
-  height: 6px;
-  border: 1.5px solid var(--text);
+  height: 7px;
+  border: 2px solid var(--text);
   border-bottom: 0;
   border-radius: 3px 3px 0 0;
 }
@@ -742,7 +742,7 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 9px;
+  width: 10px;
   height: 6px;
   background: var(--text);
   border-radius: 1px;
