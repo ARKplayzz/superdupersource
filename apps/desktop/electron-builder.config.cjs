@@ -36,6 +36,10 @@ module.exports = {
       : {}),
   },
   nsis: {
+    // The setup file, its window and the uninstaller all carry the app icon.
+    installerIcon: 'resources/icon.ico',
+    uninstallerIcon: 'resources/icon.ico',
+    installerHeaderIcon: 'resources/icon.ico',
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
