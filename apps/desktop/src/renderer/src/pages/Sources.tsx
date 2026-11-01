@@ -18,7 +18,10 @@ export function Sources({ snap }: { snap: AppSnapshot }) {
                 <div>{role}</div>
                 <div className="muted num small">Input {inputLabel(snap, input)}</div>
               </div>
-              <select className="source-select" value={input} onChange={(e) => set(role, Number(e.target.value))}>
+              <select className="source-select" value={input ?? ''} onChange={(e) => set(role, Number(e.target.value))}>
+                <option value="" disabled>
+                  No selection
+                </option>
                 <optgroup label="Inputs">
                   {choices
                     .filter((c) => c.kind === 'external')
@@ -37,7 +40,7 @@ export function Sources({ snap }: { snap: AppSnapshot }) {
                       </option>
                     ))}
                 </optgroup>
-                {!choices.some((c) => c.id === input) && <option value={input}>{input}</option>}
+                {input !== undefined && !choices.some((c) => c.id === input) && <option value={input}>{input}</option>}
               </select>
             </div>
           ))}

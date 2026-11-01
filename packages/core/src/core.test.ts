@@ -10,9 +10,9 @@ import { designTally, isOnAir, meProgramInput, ssInput } from './switcher'
 import { buildFrames, motionFor, resolveTransition, statesAt } from './transitions'
 import { FULLSCREEN, fromRaw, toRaw } from './units'
 
-const CAM = 1 // Presenter
-const SLIDES = 2
-const WIDE = 3
+const CAM = DEFAULT_SETTINGS.roles.Static // the presenter camera
+const SLIDES = DEFAULT_SETTINGS.roles.Presentation
+const WIDE = DEFAULT_SETTINGS.roles.Wide
 const settings: ShowSettings = { ...DEFAULT_SETTINGS }
 const byId = (id: string) => STARTER_DESIGNS.find((d) => d.id === id)!
 
@@ -389,7 +389,7 @@ describe('saved shows', () => {
 
   test('old role names move to the new ones and keep their inputs', () => {
     const { designs, settings } = migrateShow([oldDesign], old)
-    expect(settings.roles).toMatchObject({ Presentation: 8, Static: 7, 'Camera 3': 4, Wide: 3, Lectern: 9, 'Presentation 2': 5 })
+    expect(settings.roles).toMatchObject({ Presentation: 8, Static: 7, 'Camera 3': 4, Wide: 3, Lectern: 9, 'Presentation 2': 2 })
     expect(settings.roles.Slides).toBeUndefined()
     expect(designs[0].objects.map((o) => [o.name, o.source])).toEqual([
       ['Presentation', { role: 'Presentation' }],

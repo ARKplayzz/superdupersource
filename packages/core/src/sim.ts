@@ -15,7 +15,8 @@ export interface SimOptions {
   mixFrames?: number // auto transition length
 }
 
-const DEFAULT_CAMERAS = ['Presenter cam', 'Slides PC', 'Wide', 'Guest', 'Slides PC 2', 'Camera 6', 'Slides PC 3', 'Slides PC 4', 'Camera 9', 'Camera 10', 'Camera 11', 'Camera 12']
+// Named to match the default sources, which take inputs 1 to 10.
+const DEFAULT_CAMERAS = ['Slides PC', 'Slides PC 2', 'Slides PC 3', 'Slides PC 4', 'Presenter cam', 'Wide', 'Guest', 'Camera 8', 'Camera 9', 'Camera 10', 'Camera 11', 'Camera 12']
 
 const emptyBox = (i: number): BoxRaw => ({
   enabled: false,
@@ -65,7 +66,8 @@ export class SimSwitcher extends Emitter implements Switcher {
     for (let m = 0; m < meCount; m++) inputs[meProgramInput(m)] = { id: meProgramInput(m), kind: 'me', me: m, short: `ME${m + 1}`, name: `ME ${m + 1} Program` }
 
     this.state = {
-      mixEffects: Array.from({ length: meCount }, () => ({ program: 1, preview: 2, inTransition: false, keysOnAir: false })),
+      // Like the start of a show: the presenter camera on program (input 5 with the default names), the slides on preview.
+      mixEffects: Array.from({ length: meCount }, () => ({ program: Math.min(5, cameras.length), preview: 1, inTransition: false, keysOnAir: false })),
       superSources: Array.from({ length: superSourceCount }, (): SuperSourceState => ({
         boxes: [0, 1, 2, 3].map(emptyBox),
         artFill: 3020,

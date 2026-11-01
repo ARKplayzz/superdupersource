@@ -78,11 +78,11 @@ describe('Companion module <-> app', () => {
     // After the IN, the presenter cam is back on preview, so OUT would go to the presenter.
     expect(state().next.headline).toBe('Slides + presenter: out to Static')
     // Put the slides on preview instead.
-    t.switcher.setPreview(0, 2)
+    t.switcher.setPreview(0, DEFAULT_SETTINGS.roles.Presentation)
     await until(() => state().next.headline === 'Slides + presenter: out to Presentation')
     expect(await t.conn.request({ type: 'take', fallback: 'cut' })).toEqual({ ok: true })
     await until(() => tally('slide-10', 'pvw'))
-    expect(t.switcher.getState().mixEffects[0].program).toBe(2)
+    expect(t.switcher.getState().mixEffects[0].program).toBe(DEFAULT_SETTINGS.roles.Presentation)
     expect(t.engine.log.map((l) => l.transition)).toEqual(['out:A', 'in:B'])
   })
 

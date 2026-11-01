@@ -15,6 +15,12 @@
   --green: #30a46c;
   --radius: 2px;
   --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  /* Layers across the app, lowest first. Anything inside the design canvas stays inside it
+     (the stage isolates), so box outlines and handles never draw over menus. */
+  --z-panel: 40;
+  --z-popover: 45;
+  --z-modal: 50;
+  --z-toast: 60;
   color-scheme: dark;
 }
 
@@ -296,7 +302,7 @@ select optgroup {
 
 .popover {
   position: absolute;
-  z-index: 35;
+  z-index: var(--z-popover);
   background: var(--input);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -353,7 +359,7 @@ select optgroup {
   bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: var(--z-toast);
   max-width: 560px;
   padding: 9px 14px;
   border: 1px solid var(--line-strong);

@@ -70,15 +70,16 @@ export interface ShowSettings {
 }
 
 export const DEFAULT_SETTINGS: ShowSettings = {
+  // Inputs 1 to 10, in the order the Sources tab lists them.
   roles: {
-    Presentation: 2,
-    'Presentation 2': 5,
-    'Presentation 3': 7,
-    'Presentation 4': 8,
-    Static: 1,
-    Wide: 3,
-    'Camera 3': 4,
-    'Camera 4': 6,
+    Presentation: 1,
+    'Presentation 2': 2,
+    'Presentation 3': 3,
+    'Presentation 4': 4,
+    Static: 5,
+    Wide: 6,
+    'Camera 3': 7,
+    'Camera 4': 8,
     'Camera 5': 9,
     'Camera 6': 10,
   },

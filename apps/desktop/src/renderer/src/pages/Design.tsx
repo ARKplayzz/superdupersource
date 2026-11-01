@@ -510,8 +510,7 @@ export function Design({
                   setPreviewing(true)
                 }}
               >
-                <span>{transitionLabel(design, k)}</span>
-                <span className="anim-tab-sub" />
+                {transitionLabel(design, k)}
               </button>
             ))}
           </div>
