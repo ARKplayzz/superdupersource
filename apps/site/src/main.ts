@@ -1,6 +1,6 @@
 import { BoxState, DesignObject, SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, visibleRect, type Direction } from '@sds/core/browser'
 import { tone } from '../../desktop/src/renderer/src/tones'
-import { initReleases } from './releases'
+import { fileSize, initReleases } from './releases'
 import './styles.css'
 
 // ---------- hero: the real Slides + presenter transitions, drawn the way the app draws layouts ----------
@@ -157,7 +157,7 @@ function render(el: HTMLElement, release: Release | null, match: RegExp, what: s
   const meta = document.createElement('div')
   meta.className = 'muted num'
   const date = new Date(release.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-  meta.textContent = `${release.tag_name}, ${date}, ${(asset.size / 1e6).toFixed(1)} MB. `
+  meta.textContent = `${release.tag_name}, ${date}, ${fileSize(asset.size)}. `
   const notes = document.createElement('a')
   notes.href = '/releases/'
   notes.textContent = "What's new"

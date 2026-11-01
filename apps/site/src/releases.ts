@@ -19,6 +19,9 @@ interface Release {
   assets: Asset[]
 }
 
+// 127.9 MB, or 21 KB for something small like the Companion module.
+export const fileSize = (bytes: number) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`)
+
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 // Inline markdown: code, bold, links and bare URLs. Runs on escaped text, so it can only add these tags.
@@ -71,9 +74,11 @@ function releaseHtml(r: Release, latest: boolean): string {
   const version = r.tag_name.replace(/^v/, '')
   const date = new Date(r.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
   const assets = r.assets
-    .map((a) => ({ a, kind: KIND.find(([re]) => re.test(a.name))?.[1] }))
-    .filter((x) => x.kind)
-    .map(({ a, kind }) => `<div><a href="${escape(a.browser_download_url)}">${kind}</a> <span class="muted num">${escape(a.name)}, ${(a.size / 1e6).toFixed(1)} MB</span></div>`)
+    .map((a) => ({ a, k: KIND.findIndex(([re]) => re.test(a.name)) }))
+    .filter((x) => x.k >= 0)
+    .sort((x, y) => x.k - y.k)
+    .map(({ a, k }) => ({ a, kind: KIND[k][1] }))
+    .map(({ a, kind }) => `<div><a href="${escape(a.browser_download_url)}">${kind}</a> <span class="muted num">${escape(a.name)}, ${fileSize(a.size)}</span></div>`)
     .join('')
   const tag = latest ? '<span class="rel-tag latest">Latest</span>' : r.prerelease ? '<span class="rel-tag">Pre-release</span>' : ''
   return `<article class="rel" id="${escape(r.tag_name)}">
