@@ -11,8 +11,8 @@ export interface ShowFile {
   settings: ShowSettings
   // Starter layouts this show has seen, so new ones get added once and deleted ones stay gone.
   knownStarters?: string[]
-  // Which set of starter layouts the show was last updated to (see refreshStarters).
-  starterSet?: number
+  // What each starter layout looked like when shipped, so updates never replace one the user changed.
+  starterPrints?: Record<string, string>
 }
 
 const file = () => join(app.getPath('userData'), 'show.json')

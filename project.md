@@ -279,7 +279,7 @@ Small, resizable window (about 1100×700, minimum 960×600). Icon rail on the le
   - **Starter set 2** (1 Nov 2026). The app ships two groups, *Default Pres* and *Default Grid*, and the default IN and OUT are 850 and 750 ms (were 700 and 600):
     - Default Pres: *Slides + Presenter* (pushed; replaces the original, which no longer ships), *Slides + Two Presenters* (pushed for the slides, boxes in place for the cameras), *Slides + Three Presenters* (pushed), *Two Presentations* (two 16:9 boxes at 49%, x ±7.9, pushed).
     - Default Grid: *Two Presenters* and *Three Presenters* (other boxes in place) with a *Push* variant of each, and *Four Grid* (other boxes in place).
-    - Saved shows are updated once on load: starter layouts are replaced by these, the original Slides + presenter is swapped for the pushed one on the shortlist, and layouts in the old groups move to the new ones. Layouts the user made are kept.
+    - 0.1.3 replaced the starters in saved shows once. From 0.1.4, updates never overwrite anything the user changed: the show records a fingerprint of each starter as shipped, and an update replaces a starter only while it still matches (older shows are checked against the 0.1.0 to 0.1.2 fingerprints). Edited starters, the user's own layouts, the Active list, settings and timings come through as saved, and nothing is deleted.
   - Duration, delay (for staggering), easing (presets plus a curve editor).
 - **Timeline:** one track per object, so the stagger is visible.
 - **Test on preview** (§7).

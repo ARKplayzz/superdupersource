@@ -10,7 +10,7 @@ interface Saved {
   shortlist: string[]
   settings: ShowSettings
   knownStarters?: string[]
-  starterSet?: number
+  starterPrints?: Record<string, string>
 }
 
 const KEY = 'sds-show'
@@ -26,6 +26,11 @@ function read(): Saved {
 
 export function createBrowserApi(): SdsApi {
   const show = read()
+  try {
+    localStorage.setItem(KEY, JSON.stringify(show))
+  } catch {
+    // Storage can be unavailable (private window).
+  }
   const switcher = new SimSwitcher({ fps: 50 })
   switcher.start()
   const engine = new Engine(switcher, show.settings, show.designs)

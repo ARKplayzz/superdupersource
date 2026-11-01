@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { Engine } from './engine'
 import { lerpBox, offscreen, visibleRect } from './geometry'
-import { GROUP_GRID, GROUP_PRES, SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, mergeNewStarters, migrateShow, upgradeShow } from './library'
+import { GROUP_GRID, GROUP_PRES, SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, fingerprint, freshShow, mergeNewStarters, migrateShow, upgradeShow } from './library'
 import { findMatch, resolveSource } from './matching'
 import { DEFAULT_SETTINGS, ShowSettings } from './model'
 import { planIn, planOut } from './plan'
@@ -440,39 +440,62 @@ describe('saved shows', () => {
   })
 })
 
-describe('starter set 2', () => {
-  // A show saved by 0.1.x: the old Slides + presenter on the shortlist, starters in the old groups,
-  // and a layout of the user's own.
+describe('updating a saved show', () => {
+  // A show saved by 0.1.2, exactly as that version shipped it, plus a layout of the user's own.
+  const old02 = { ...byId('slide-04'), name: 'Four up', group: 'Grid', transitions: {} }
   const mine = { ...SLIDE_10_PUSH, id: 'custom-1', name: 'My layout', group: 'Grid' }
-  const old = {
-    designs: [
-      { ...SLIDE_10, group: 'Main + side column' },
-      { ...SLIDE_10_PUSH, name: 'Slides + presenter (push)', group: 'Main + side column' },
-      { ...byId('slide-04'), name: 'Four up', group: 'Grid', transitions: {} },
-      mine,
-    ],
-    shortlist: ['slide-10', 'slide-10-push', 'custom-1'],
-    settings: { groups: ['Main + side column', 'Grid'] },
+  const saved = {
+    designs: [{ ...SLIDE_10, group: 'Main + side column' }, old02, mine],
+    shortlist: ['slide-10', 'custom-1', 'slide-04'],
+    settings: { ...DEFAULT_SETTINGS, groups: ['Main + side column', 'Grid'], takeMe: 1, roles: { ...DEFAULT_SETTINGS.roles, Static: 12 } },
     knownStarters: ['slide-10', 'slide-10-push', 'slide-11', 'slide-12', 'slide-02', 'slide-03', 'slide-04', 'two-presentations'],
   }
 
-  test('an old save gets the new starters, groups and shortlist once', () => {
-    const show = upgradeShow(old)
-    const ids = show.designs.map((d) => d.id)
-    expect(ids).not.toContain('slide-10')
+  test('an untouched old starter is updated to this version', () => {
+    expect(fingerprint(old02)).toBe('0ded8f4b') // what 0.1.0 to 0.1.2 shipped
+    const show = upgradeShow(saved)
     expect(show.designs.find((d) => d.id === 'slide-04')).toEqual(byId('slide-04'))
-    expect(show.designs.find((d) => d.id === 'custom-1')!.group).toBe(GROUP_GRID)
-    expect(ids).toEqual(expect.arrayContaining(['slide-02-push', 'slide-03-push']))
-    expect(show.shortlist).toEqual(['slide-10-push', 'custom-1'])
-    expect(show.settings.groups).toEqual([GROUP_PRES, GROUP_GRID])
-    expect(show.starterSet).toBe(2)
+    expect(show.starterPrints['slide-04']).toBe(fingerprint(byId('slide-04')))
   })
 
-  test("after that, the user's changes to a starter stay", () => {
-    const show = upgradeShow(old)
-    const edited = show.designs.map((d) => (d.id === 'slide-04' ? { ...d, name: 'My grid' } : d))
-    const again = upgradeShow({ ...show, designs: edited })
+  test('the Active list, settings and your own layouts come through exactly as saved', () => {
+    const show = upgradeShow(saved)
+    expect(show.shortlist).toEqual(saved.shortlist)
+    expect(show.settings.takeMe).toBe(1)
+    expect(show.settings.roles.Static).toBe(12)
+    expect(show.designs.find((d) => d.id === 'custom-1')).toEqual(mine)
+    // Its group is still there, because it's still in use.
+    expect(show.settings.groups).toEqual([GROUP_PRES, GROUP_GRID, 'Grid'])
+  })
+
+  test('a starter you changed is never replaced, by any later update', () => {
+    const edited = { ...old02, transitions: { 'in:A': { A: { delayMs: 0, durationMs: 1200, easing: 'linear' as const } } } }
+    const first = upgradeShow({ ...saved, designs: [edited, mine] })
+    expect(first.designs.find((d) => d.id === 'slide-04')).toEqual(edited)
+    const again = upgradeShow(first)
+    expect(again.designs.find((d) => d.id === 'slide-04')).toEqual(edited)
+  })
+
+  test('edits made after an update survive the next update', () => {
+    const show = upgradeShow(saved)
+    const renamed = show.designs.map((d) => (d.id === 'slide-04' ? { ...d, name: 'My grid' } : d))
+    const again = upgradeShow({ ...show, designs: renamed })
     expect(again.designs.find((d) => d.id === 'slide-04')!.name).toBe('My grid')
   })
-})
 
+  test('nothing is deleted: the old Slides + presenter stays, moved to the new group', () => {
+    const show = upgradeShow(saved)
+    expect(show.designs.find((d) => d.id === 'slide-10')).toEqual(SLIDE_10)
+    // A starter you deleted doesn't come back.
+    const without = upgradeShow({ ...show, designs: show.designs.filter((d) => d.id !== 'slide-12') })
+    expect(without.designs.some((d) => d.id === 'slide-12')).toBe(false)
+  })
+
+  test('a show from 0.1.3 (no fingerprints yet) keeps its edits too', () => {
+    const fromV013 = { ...freshShow(), starterPrints: undefined, designs: freshShow().designs.map((d) => (d.id === 'slide-02' ? { ...d, name: 'Interview' } : d)) }
+    const show = upgradeShow(fromV013)
+    expect(show.designs.find((d) => d.id === 'slide-02')!.name).toBe('Interview')
+    expect(show.starterPrints['slide-02']).toBeUndefined()
+    expect(show.starterPrints['slide-04']).toBe(fingerprint(byId('slide-04')))
+  })
+})

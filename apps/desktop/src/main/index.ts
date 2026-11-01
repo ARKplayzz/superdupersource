@@ -14,6 +14,8 @@ if (!app.requestSingleInstanceLock()) app.quit()
 const icon = (size: 16 | 32 | 256) => nativeImage.createFromPath(join(__dirname, `../../resources/icon-${size}.png`))
 
 const show = loadShow()
+// Write the updated show straight back, so the starter fingerprints are on disk before any later update.
+saveShow(show)
 
 // Start with Windows, in the tray. Windows matches the login entry by its arguments, so reading the
 // setting has to pass the same ones as saving it, or it always reads as off.

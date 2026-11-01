@@ -230,27 +230,66 @@ export function mergeNewStarters(designs: Design[], known?: string[]): { designs
   return { designs: [...designs, ...added], known: [...new Set([...seen, ...STARTER_DESIGNS.map((d) => d.id)])], added: added.map((d) => d.id) }
 }
 
-// Which set of starter layouts a show was last brought up to. Set 2 (Default Pres and Default Grid)
-// renamed and regrouped the starters and dropped the original Slides + presenter.
-export const STARTER_SET = 2
-const GROUP_RENAMES: Record<string, string> = { 'Main + side column': GROUP_PRES, Grid: GROUP_GRID }
+// A short fingerprint of a layout's content (everything but its id), so an update can tell whether
+// the user has changed a starter layout since it was shipped. Key order and JSON round trips don't
+// change it.
+export function fingerprint(design: Design): string {
+  const { id: _id, ...content } = JSON.parse(JSON.stringify(design)) as Design
+  const stable = (v: unknown): string =>
+    Array.isArray(v)
+      ? `[${v.map(stable).join(',')}]`
+      : v && typeof v === 'object'
+        ? `{${Object.keys(v)
+            .sort()
+            .map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`)
+            .join(',')}}`
+        : JSON.stringify(v)
+  // FNV-1a, 32 bit. Plenty to spot an edit; this isn't security.
+  let h = 0x811c9dc5
+  for (const ch of stable(content)) {
+    h ^= ch.charCodeAt(0)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h.toString(16).padStart(8, '0')
+}
 
-// One-time update of a saved show to the current starter set: starter layouts are replaced with
-// this version's (by id), the old Slides + presenter goes (its pushed copy takes its place in the
-// shortlist), and layouts in the old groups move to the new ones. Layouts the user made are kept.
-export function refreshStarters(
-  show: { designs: Design[]; shortlist: string[]; settings: ShowSettings },
-  set = 1,
-): { designs: Design[]; shortlist: string[]; settings: ShowSettings; set: number } {
-  if (set >= STARTER_SET) return { ...show, set }
-  const starters = new Map(STARTER_DESIGNS.map((d) => [d.id, d]))
-  const designs = show.designs
-    .filter((d) => d.id !== 'slide-10')
-    .map((d) => starters.get(d.id) ?? { ...d, group: GROUP_RENAMES[d.group] ?? d.group })
-  let shortlist = show.shortlist.map((id) => (id === 'slide-10' ? 'slide-10-push' : id))
-  shortlist = shortlist.filter((id, i) => shortlist.indexOf(id) === i)
-  const groups = [GROUP_PRES, GROUP_GRID, ...show.settings.groups.map((g) => GROUP_RENAMES[g] ?? g).filter((g) => g !== GROUP_PRES && g !== GROUP_GRID)]
-  return { designs, shortlist, settings: { ...show.settings, groups }, set: STARTER_SET }
+// Fingerprints of the starter layouts that 0.1.0 to 0.1.2 shipped. Shows from those versions didn't
+// record what they were given, so these tell an untouched old starter from one the user changed.
+const LEGACY_PRINTS: Record<string, string> = {
+  'slide-10': 'cd1252cf',
+  'slide-10-push': '22148c3f',
+  'slide-11': '1544eb20',
+  'slide-12': '664106f9',
+  'slide-02': '0d0a1fbc',
+  'two-presentations': '60dc1897',
+  'slide-03': '6bfed192',
+  'slide-04': '0ded8f4b',
+}
+
+// Starters that no longer ship. An untouched copy is still updated (to its new group), never deleted.
+const RETIRED: Design[] = [SLIDE_10]
+
+// Group names the starters used before 0.1.3.
+const OLD_GROUPS = ['Main + side column', 'Grid']
+
+// Updates the starter layouts in a saved show without touching anything the user changed.
+// A starter is replaced with this version's only when it's exactly as shipped: it matches the
+// fingerprint recorded when the show was given it (or, for shows from before fingerprints, the
+// version that release shipped). Edited starters, the user's own layouts, the Active list and
+// settings are left alone. `prints` records what each starter looked like when shipped.
+export function updateStarters(designs: Design[], prints: Record<string, string> = {}): { designs: Design[]; prints: Record<string, string> } {
+  const current = new Map([...RETIRED, ...STARTER_DESIGNS].map((d) => [d.id, d]))
+  const next = { ...prints }
+  const updated = designs.map((d) => {
+    const starter = current.get(d.id)
+    if (!starter) return d
+    const print = fingerprint(d)
+    const untouched = print === prints[d.id] || (!prints[d.id] && (print === LEGACY_PRINTS[d.id] || print === fingerprint(starter)))
+    if (!untouched) return d
+    next[d.id] = fingerprint(starter)
+    return starter
+  })
+  return { designs: updated, prints: next }
 }
 
 // A show as saved, from any version. Older saves miss some fields.
@@ -259,7 +298,7 @@ export interface SavedShow {
   shortlist?: string[]
   settings?: Partial<ShowSettings>
   knownStarters?: string[]
-  starterSet?: number
+  starterPrints?: Record<string, string>
 }
 
 export interface CurrentShow {
@@ -267,7 +306,7 @@ export interface CurrentShow {
   shortlist: string[]
   settings: ShowSettings
   knownStarters: string[]
-  starterSet: number
+  starterPrints: Record<string, string>
 }
 
 export const freshShow = (): CurrentShow => ({
@@ -275,15 +314,23 @@ export const freshShow = (): CurrentShow => ({
   shortlist: DEFAULT_SHORTLIST,
   settings: DEFAULT_SETTINGS,
   knownStarters: STARTER_DESIGNS.map((d) => d.id),
-  starterSet: STARTER_SET,
+  starterPrints: Object.fromEntries(STARTER_DESIGNS.map((d) => [d.id, fingerprint(d)])),
 })
 
-// Brings any saved show up to date: the starter set, starters new in this version, then renamed roles.
+// Brings any saved show up to date. It only ever adds or refreshes untouched starters, adds roles
+// and groups that are missing, and renames old role names; the Active list, settings, the user's own
+// layouts and any edited layout come through exactly as saved.
 export function upgradeShow(saved: SavedShow): CurrentShow {
   if (!saved.designs?.length) return { ...freshShow(), shortlist: saved.shortlist ?? DEFAULT_SHORTLIST }
-  const settings = { ...DEFAULT_SETTINGS, ...saved.settings }
-  const refreshed = refreshStarters({ designs: saved.designs, shortlist: saved.shortlist ?? DEFAULT_SHORTLIST, settings }, saved.starterSet ?? 1)
+  const refreshed = updateStarters(saved.designs, saved.starterPrints)
   const merged = mergeNewStarters(refreshed.designs, saved.knownStarters)
-  const current = migrateShow(merged.designs, refreshed.settings)
-  return { designs: current.designs, shortlist: refreshed.shortlist, settings: current.settings, knownStarters: merged.known, starterSet: refreshed.set }
+  const prints = { ...refreshed.prints }
+  for (const id of merged.added) prints[id] = fingerprint(STARTER_DESIGNS.find((d) => d.id === id)!)
+
+  // The starters' groups come first; an old starter group stays only while something is still in it.
+  const settings = { ...DEFAULT_SETTINGS, ...saved.settings }
+  const used = new Set(merged.designs.map((d) => d.group))
+  const groups = [GROUP_PRES, GROUP_GRID, ...settings.groups.filter((g) => g !== GROUP_PRES && g !== GROUP_GRID && (used.has(g) || !OLD_GROUPS.includes(g)))]
+  const current = migrateShow(merged.designs, { ...settings, groups })
+  return { designs: current.designs, shortlist: saved.shortlist ?? DEFAULT_SHORTLIST, settings: current.settings, knownStarters: merged.known, starterPrints: prints }
 }
