@@ -15,6 +15,10 @@ const icon = (size: 16 | 32 | 256) => nativeImage.createFromPath(join(__dirname,
 
 const show = loadShow()
 
+// Start with Windows, in the tray. Windows matches the login entry by its arguments, so reading the
+// setting has to pass the same ones as saving it, or it always reads as off.
+const LOGIN_ITEM = { args: ['--hidden'] }
+
 // The app drives either the simulator or a real ATEM. Both implement the core Switcher interface,
 // so the engine, the window and the Companion API don't care which.
 let switcher: SimSwitcher | AtemSwitcher = new SimSwitcher({ fps: 50 })
@@ -64,7 +68,7 @@ function snapshot(): AppSnapshot {
     designs: show.designs,
     shortlist: show.shortlist,
     settings: show.settings,
-    app: { version: app.getVersion(), openAtLogin: app.getLoginItemSettings().openAtLogin, update: updates.state },
+    app: { version: app.getVersion(), openAtLogin: app.getLoginItemSettings(LOGIN_ITEM).openAtLogin, update: updates.state },
     companion: localApi.status,
     connection: connectionInfo(),
   }
@@ -211,7 +215,7 @@ ipcMain.handle(CHANNEL.setSettings, async (_e, settings: ShowSettings) => {
   }
 })
 ipcMain.handle(CHANNEL.setOpenAtLogin, (_e, on: boolean) => {
-  app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
+  app.setLoginItemSettings({ openAtLogin: on, ...LOGIN_ITEM })
   push()
 })
 ipcMain.handle(CHANNEL.setConnection, (_e, mode: 'simulator' | 'atem', address: string) =>
