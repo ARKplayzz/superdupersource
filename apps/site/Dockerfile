@@ -1,4 +1,4 @@
-# superdupersource.kennedys.nz: the download page plus the in-browser demo at /demo.
+# superdupersource.kennedys.nz: the download page and release notes.
 # Built by CapRover from the repo root (see captain-definition).
 
 FROM node:22-slim AS build
@@ -10,7 +10,7 @@ COPY packages ./packages
 COPY apps ./apps
 RUN npm ci --no-audit --no-fund
 COPY Supersources-templates ./Supersources-templates
-RUN npm run build:all -w @sds/site
+RUN npm run build -w @sds/site
 
 FROM nginx:1.27-alpine
 COPY apps/site/nginx.conf /etc/nginx/conf.d/default.conf

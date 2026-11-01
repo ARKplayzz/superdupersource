@@ -68,10 +68,18 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           signed=$([ -n "${{ secrets.AZURE_CLIENT_ID }}" ] && echo "signed" || echo "unsigned: Windows SmartScreen will warn on install, choose More info, then Run anyway")
+          # Notes come from release-notes/<tag>.md when there is one. The download page shows them on /releases/.
+          notes="release-notes/$GITHUB_REF_NAME.md"
+          {
+            if [ -f "$notes" ]; then cat "$notes"; echo; fi
+            echo "## Downloads"
+            echo
+            echo "- Windows installer, $signed."
+            echo "- Companion module (.tgz) for Companion 4.3 or later."
+          } > release-body.md
           gh release create "$GITHUB_REF_NAME" \
             --title "SuperDuperSource $version" \
-            --generate-notes \
-            --notes "Windows installer ($signed) and the Companion module for Companion 4.3 or later. Not yet tested on a real ATEM switcher." \
+            --notes-file release-body.md \
             "apps/desktop/release/SuperDuperSource-Setup-$version.exe" \
             "apps/desktop/release/SuperDuperSource-Setup-$version.exe.blockmap" \
             "apps/desktop/release/latest.yml" \

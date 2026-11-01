@@ -17,7 +17,7 @@ The app drives either a real ATEM over the network or a built-in simulator with 
 | `apps/companion` | The Bitfocus Companion module (Companion 4.3 or later). |
 | `packages/atem` | The ATEM adapter: connection, discovery, state, and takes streamed frame by frame. |
 | `packages/protocol` | Types for the link between the app and the Companion module. |
-| `apps/site` | The download page at superdupersource.kennedys.nz, with the in-browser demo at `/demo`. |
+| `apps/site` | The download page at superdupersource.kennedys.nz, with release notes at `/releases/`. |
 | `spike` | Phase 0 scripts to run on a real ATEM. |
 | `Supersources-templates` | Background and cutout PNGs. |
 
@@ -99,7 +99,7 @@ Installed copies check for updates about 15 seconds after starting and every 6 h
 
 ## Download page
 
-`apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slide 10 transitions with the app's own renderer, and `/demo` is the desktop UI running on the simulator in the browser. It lists the latest GitHub release when there is one.
+`apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slides + presenter transitions, drawn the way the app draws layouts. It links the latest GitHub release, and `/releases/` lists every release with its notes.
 
 ```bash
 npm run dev -w @sds/site

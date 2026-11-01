@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:all": "vite build && npm run build:web -w @sds/desktop -- --outDir ../../../site/dist/demo --base ./ --emptyOutDir",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

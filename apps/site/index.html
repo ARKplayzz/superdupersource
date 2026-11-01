@@ -16,9 +16,8 @@
         SuperDuperSource <small>.kennedys</small>
       </a>
       <nav>
-        <a href="#how">How it works</a>
-        <a href="/demo/">Demo</a>
-        <a href="#download">Download</a>
+        <a href="/" aria-current="page">Overview</a>
+        <a href="/releases/">Releases</a>
         <a href="https://github.com/ARKplayzz/superdupersource">GitHub</a>
       </nav>
     </header>
@@ -32,13 +31,13 @@
             is on preview. The cut itself happens while both pictures are identical, so viewers don't see it.
           </p>
           <div class="actions">
-            <a class="btn primary" href="/demo/">Try it in your browser</a>
-            <a class="btn" href="#download" id="hero-download">Downloads</a>
+            <a class="btn primary" href="#download" id="hero-download">Downloads</a>
+            <a class="btn" href="/releases/">What's new</a>
           </div>
-          <p class="status"><span class="dot"></span>In development. The ATEM connection is written but hasn't been tested on a switcher yet. Until then, try it on the built-in simulator.</p>
+          <p class="status">Early release. The ATEM connection is written but hasn't been tested on a switcher yet, so the app also runs a built-in simulator.</p>
         </div>
-        <figure class="hero-demo">
-          <canvas id="hero" width="960" height="540" aria-label="The Slide 10 layout animating in from the presenter camera and out to the slides"></canvas>
+        <figure class="hero-anim">
+          <canvas id="hero" width="960" height="540" aria-label="The Slides + presenter layout animating in from the static camera and out to the slides"></canvas>
           <figcaption>
             <span id="step" class="num">Program: Presenter cam</span>
             <button id="pause" class="link" type="button">Pause</button>
@@ -82,17 +81,24 @@
 
       <section class="band split">
         <div>
-          <h2>Design tab</h2>
+          <h2>Design</h2>
           <p>
-            Drag, resize and crop boxes over the background. Each layout can carry one of your cutout templates as a guide, and a box fits to any of its holes in one click. Every source in a
-            layout gets its own IN and OUT, so coming in from the slides can move differently from coming in from the camera.
+            Drag, resize and crop boxes over the background, with grids or one of your cutout templates laid over the top. A box fits a template's
+            cutout in one click. Every source gets its own IN and OUT, set box by box along the bottom. Changes stay as a draft until you save.
+          </p>
+        </div>
+        <div>
+          <h2>Sources</h2>
+          <p>
+            Layouts name sources, not inputs: Presentation 1 to 4, Static, Wide and Camera 3 to 6. Set which input each one is once per venue, and
+            every layout follows. An M/E's program works as a source too.
           </p>
         </div>
         <div>
           <h2>Companion</h2>
           <p>
-            A Companion module gives you SS CUT, SS AUTO and a button per layout. Layout buttons go green on preview and red on program. Take
-            buttons go orange when an animated take is ready. Needs Companion 4.3 or later.
+            The app holds the show's Active SuperSources, in the order of the Companion buttons. The module gives you SS CUT, SS AUTO and a button
+            per layout, green on preview and red on program. Needs Companion 4.3 or later.
           </p>
         </div>
       </section>
@@ -107,13 +113,13 @@
           </article>
           <article class="card">
             <h3>Companion module</h3>
-            <p class="muted">Import the .tgz under Modules in Companion 4.3 or later.</p>
+            <p class="muted">In Companion 4.3 or later, open Modules and import the .tgz. The app's Setup tab can fetch it for you.</p>
             <div id="module-release" class="release">Checking for a release…</div>
           </article>
         </div>
         <p class="muted">
-          Until the first release, build from source: clone the repo, run <code>npm install</code>, then <code>npm run dev -w @sds/desktop</code>. The
-          <a href="https://github.com/ARKplayzz/superdupersource#readme">README</a> has the details.
+          Earlier versions and what changed are on <a href="/releases/">Releases</a>. To build from source, clone the repo, run <code>npm install</code>,
+          then <code>npm run dev -w @sds/desktop</code>. The <a href="https://github.com/ARKplayzz/superdupersource#readme">README</a> has the details.
         </p>
       </section>
 
@@ -153,7 +159,7 @@
     </main>
 
     <footer class="foot">
-      <span>MIT licence · <a href="https://github.com/ARKplayzz/superdupersource">Source on GitHub</a></span>
+      <span>MIT licence. <a href="https://github.com/ARKplayzz/superdupersource">Source on GitHub</a></span>
       <span>Not affiliated with or endorsed by Blackmagic Design.</span>
     </footer>
 

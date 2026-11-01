@@ -24,5 +24,9 @@ function background(): Plugin {
 export default defineConfig({
   plugins: [background()],
   server: { port: 5198, strictPort: true },
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: { input: { main: resolve(__dirname, 'index.html'), releases: resolve(__dirname, 'releases/index.html') } },
+  },
 })

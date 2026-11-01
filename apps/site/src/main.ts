@@ -1,30 +1,70 @@
-import { SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, type Direction } from '@sds/core/browser'
-import { drawLayout, onImagesLoaded, setSourceLabels } from '../../desktop/src/renderer/src/render'
+import { BoxState, DesignObject, SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, visibleRect, type Direction } from '@sds/core/browser'
+import { tone } from '../../desktop/src/renderer/src/tones'
+import { initReleases } from './releases'
 import './styles.css'
 
-// ---------- hero: the real Slide 10 transitions, drawn with the app's own renderer ----------
+// ---------- hero: the real Slides + presenter transitions, drawn the way the app draws layouts ----------
 
-const canvas = document.getElementById('hero') as HTMLCanvasElement
-const stepLabel = document.getElementById('step')!
-const pauseBtn = document.getElementById('pause') as HTMLButtonElement
-const g = canvas.getContext('2d')!
-setSourceLabels(false)
-const switcher = new SimSwitcher() // only for its input names and stand-in pictures
-const state = switcher.getState()
-const sources = Object.fromEntries(SLIDE_10.objects.map((o) => [o.id, inputFor(o.source, DEFAULT_SETTINGS.roles) ?? 1]))
+const canvas = document.getElementById('hero') as HTMLCanvasElement | null
+const stepLabel = document.getElementById('step')
+const pauseBtn = document.getElementById('pause') as HTMLButtonElement | null
+const inputs = new SimSwitcher().getState().inputs // only for the stand-in input names
+const sub = (o: DesignObject) => {
+  const id = inputFor(o.source, DEFAULT_SETTINGS.roles)
+  return id === undefined ? '' : `${id} ${inputs[id]?.name ?? ''}`
+}
+
+const background = new Image()
+background.src = '/Slide_01.PNG'
+
+// Flat boxes on the background, each with its source name and input, as in the app. boxes[0] is on top.
+function drawFlat(g: CanvasRenderingContext2D, boxes: { object: DesignObject; state: BoxState }[], w: number, h: number) {
+  if (background.complete && background.naturalWidth) g.drawImage(background, 0, 0, w, h)
+  else {
+    g.fillStyle = '#000'
+    g.fillRect(0, 0, w, h)
+  }
+  const k = w / 32
+  for (let i = boxes.length - 1; i >= 0; i--) {
+    const { object, state } = boxes[i]
+    const r = visibleRect(state)
+    const x = (r.l + 16) * k
+    const y = (9 - r.t) * k
+    const bw = (r.r - r.l) * k
+    const bh = (r.t - r.b) * k
+    if (bw < 1 || bh < 1) continue
+    const [bg, fg] = tone(object)
+    g.fillStyle = bg
+    g.fillRect(x, y, bw, bh)
+    const name = w * 0.024
+    if (bw < name * 3 || bh < name * 2.6) continue
+    g.save()
+    g.beginPath()
+    g.rect(x, y, bw, bh)
+    g.clip()
+    g.fillStyle = fg
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.font = `600 ${name}px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`
+    g.fillText(object.name, x + bw / 2, y + bh / 2 - name * 0.55)
+    g.font = `${name * 0.78}px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`
+    g.fillText(sub(object), x + bw / 2, y + bh / 2 + name * 0.65)
+    g.restore()
+  }
+}
 
 type Beat = { kind: 'hold'; ms: number; dir: Direction; matched: string; at: 'start' | 'end'; label: string } | { kind: 'move'; dir: Direction; matched: string; label: string }
 
-// Presenter full screen -> layout -> slides full screen -> layout -> presenter full screen, looping.
+// Camera full screen -> layout -> slides full screen -> layout -> camera full screen, looping.
 const BEATS: Beat[] = [
   { kind: 'hold', ms: 1400, dir: 'in', matched: 'B', at: 'start', label: 'Program: Presenter cam' },
-  { kind: 'move', dir: 'in', matched: 'B', label: 'SS CUT: in from Presenter' },
+  { kind: 'move', dir: 'in', matched: 'B', label: 'SS CUT: in from Static' },
   { kind: 'hold', ms: 1800, dir: 'in', matched: 'B', at: 'end', label: 'Program: Slides + presenter' },
-  { kind: 'move', dir: 'out', matched: 'A', label: 'SS CUT: out to Slides' },
+  { kind: 'move', dir: 'out', matched: 'A', label: 'SS CUT: out to Presentation' },
   { kind: 'hold', ms: 1400, dir: 'out', matched: 'A', at: 'end', label: 'Program: Slides PC' },
-  { kind: 'move', dir: 'in', matched: 'A', label: 'SS CUT: in from Slides' },
+  { kind: 'move', dir: 'in', matched: 'A', label: 'SS CUT: in from Presentation' },
   { kind: 'hold', ms: 1800, dir: 'in', matched: 'A', at: 'end', label: 'Program: Slides + presenter' },
-  { kind: 'move', dir: 'out', matched: 'B', label: 'SS CUT: out to Presenter' },
+  { kind: 'move', dir: 'out', matched: 'B', label: 'SS CUT: out to Static' },
 ]
 
 const beatLength = (b: Beat) => (b.kind === 'hold' ? b.ms : durationMs(resolveTransition(SLIDE_10, b.dir, b.matched)))
@@ -38,7 +78,7 @@ function frameAt(t: number) {
       const rt = resolveTransition(SLIDE_10, b.dir, b.matched)
       const at = b.kind === 'move' ? ms : b.at === 'start' ? 0 : Infinity
       const states = statesAt(rt, at)
-      const boxes = rt.tracks.map((tr, i) => ({ source: sources[tr.objectId], state: states[i] }))
+      const boxes = rt.tracks.map((tr, i) => ({ object: SLIDE_10.objects.find((o) => o.id === tr.objectId)!, state: states[i] }))
       return { boxes, label: b.label }
     }
     ms -= len
@@ -52,6 +92,8 @@ let last = performance.now()
 let lastLabel = ''
 
 function draw() {
+  if (!canvas) return
+  const g = canvas.getContext('2d')!
   const r = canvas.getBoundingClientRect()
   const dpr = window.devicePixelRatio || 1
   const w = Math.round(r.width * dpr)
@@ -61,8 +103,8 @@ function draw() {
   if (canvas.height !== h) canvas.height = h
   const f = frameAt(elapsed)
   if (!f) return
-  drawLayout(g, state, f.boxes, w, h, 'Slide_01.PNG')
-  if (f.label !== lastLabel) {
+  drawFlat(g, f.boxes, w, h)
+  if (stepLabel && f.label !== lastLabel) {
     stepLabel.textContent = f.label
     lastLabel = f.label
   }
@@ -74,14 +116,15 @@ function tick(now: number) {
   draw()
   requestAnimationFrame(tick)
 }
-requestAnimationFrame(tick)
-onImagesLoaded(draw)
-
-pauseBtn.textContent = playing ? 'Pause' : 'Play'
-pauseBtn.addEventListener('click', () => {
-  playing = !playing
+if (canvas && pauseBtn) {
+  requestAnimationFrame(tick)
+  background.onload = draw
   pauseBtn.textContent = playing ? 'Pause' : 'Play'
-})
+  pauseBtn.addEventListener('click', () => {
+    playing = !playing
+    pauseBtn.textContent = playing ? 'Pause' : 'Play'
+  })
+}
 
 // ---------- downloads: latest GitHub release, if there is one ----------
 
@@ -114,17 +157,18 @@ function render(el: HTMLElement, release: Release | null, match: RegExp, what: s
   const meta = document.createElement('div')
   meta.className = 'muted num'
   const date = new Date(release.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-  meta.textContent = `${release.tag_name} · ${date} · ${(asset.size / 1e6).toFixed(1)} MB · `
+  meta.textContent = `${release.tag_name}, ${date}, ${(asset.size / 1e6).toFixed(1)} MB. `
   const notes = document.createElement('a')
-  notes.href = release.html_url
-  notes.textContent = 'release notes'
+  notes.href = '/releases/'
+  notes.textContent = "What's new"
   meta.append(notes)
   el.append(a, meta)
 }
 
 async function loadReleases() {
-  const app = document.getElementById('app-release')!
-  const mod = document.getElementById('module-release')!
+  const app = document.getElementById('app-release')
+  const mod = document.getElementById('module-release')
+  if (!app || !mod) return
   let release: Release | null = null
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
@@ -146,3 +190,4 @@ async function loadReleases() {
   render(mod, release, /\.tgz$/i, 'Companion module')
 }
 void loadReleases()
+initReleases()

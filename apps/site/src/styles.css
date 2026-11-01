@@ -1,13 +1,16 @@
 :root {
-  --bg: #121315;
-  --panel: #18191c;
-  --panel-2: #1f2024;
-  --line: #2b2d33;
-  --line-strong: #3a3d44;
-  --text: #e7e8eb;
-  --muted: #9a9fa8;
-  --accent: #e8642a; /* the template orange */
-  --accent-ink: #160a04;
+  /* The app's palette: greys and black. Red and green only mean status. */
+  --bg: #0f0f0f;
+  --panel: #161616;
+  --panel-2: #1f1f1f;
+  --line: #2a2a2a;
+  --line-strong: #3a3a3a;
+  --text: #e8e8e8;
+  --muted: #8c8c8c;
+  --accent: #e8e8e8;
+  --accent-ink: #0f0f0f;
+  --green: #30a46c;
+  --radius: 2px;
   --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --max: 1120px;
@@ -16,15 +19,16 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
-    --bg: #f6f5f3;
+    --bg: #f4f4f4;
     --panel: #ffffff;
-    --panel-2: #efeeeb;
-    --line: #e2e0dc;
-    --line-strong: #cfccc7;
-    --text: #1b1c1f;
-    --muted: #5d626b;
-    --accent: #c94f17;
+    --panel-2: #ebebeb;
+    --line: #dddddd;
+    --line-strong: #c4c4c4;
+    --text: #161616;
+    --muted: #5c5c5c;
+    --accent: #161616;
     --accent-ink: #ffffff;
+    --green: #1f7a4f;
     color-scheme: light;
   }
 }
@@ -51,13 +55,13 @@ a {
 }
 
 a:hover {
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--text);
 }
 
 code {
   padding: 1px 5px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--panel-2);
   font: 0.88em var(--mono);
 }
@@ -94,7 +98,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-weight: 650;
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -103,19 +107,37 @@ h3 {
   font-weight: 400;
 }
 
+/* Full width, so the bottom line runs edge to edge like the app's top bar. */
+.top {
+  max-width: none;
+  height: 56px;
+  padding: 0 max(24px, calc((100% - var(--max)) / 2 + 24px));
+  border-bottom: 1px solid var(--line);
+}
+
 .top nav {
   display: flex;
-  gap: 22px;
+  align-self: stretch;
+  gap: 20px;
   font-size: 15px;
 }
 
+/* Tabs, as in the app: the current page is white with a 2px underline. */
 .top nav a {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
   color: var(--muted);
   text-decoration: none;
 }
 
 .top nav a:hover {
   color: var(--text);
+}
+
+.top nav a[aria-current='page'] {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--text);
 }
 
 /* ---------- hero ---------- */
@@ -150,61 +172,49 @@ h3 {
 .btn {
   display: inline-flex;
   align-items: center;
-  height: 42px;
+  height: 40px;
   padding: 0 18px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--panel);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--panel-2);
   font-weight: 600;
   text-decoration: none;
 }
 
 .btn:hover {
-  border-color: var(--muted);
+  background: var(--line-strong);
 }
 
 .btn.primary {
-  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-ink);
 }
 
 .btn.primary:hover {
-  filter: brightness(1.07);
+  background: var(--accent);
+  opacity: 0.88;
 }
 
 .status {
-  display: flex;
-  gap: 9px;
-  align-items: baseline;
   margin: 22px 0 0;
   color: var(--muted);
   font-size: 14px;
 }
 
-.status .dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: translateY(-1px);
-}
-
-.hero-demo {
+.hero-anim {
   margin: 0;
 }
 
-.hero-demo canvas {
+.hero-anim canvas {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: #000;
 }
 
-.hero-demo figcaption {
+.hero-anim figcaption {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -268,10 +278,10 @@ h3 {
   width: 28px;
   height: 28px;
   margin-bottom: 12px;
-  border: 1px solid var(--accent);
-  border-radius: 50%;
-  color: var(--accent);
-  font-weight: 650;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-weight: 600;
   font-size: 14px;
 }
 
@@ -305,7 +315,7 @@ h3 {
 
 .split {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 48px;
 }
 
@@ -331,7 +341,7 @@ h3 {
 .card {
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--panel);
 }
 
@@ -372,10 +382,8 @@ h3 {
 
 .switchers th {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 /* ---------- footer ---------- */
@@ -395,6 +403,100 @@ h3 {
 
 /* ---------- small screens ---------- */
 
+/* ---------- releases ---------- */
+
+.page-head {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 48px 24px 8px;
+}
+
+.page-head h1 {
+  font-size: clamp(28px, 3vw, 36px);
+}
+
+.page-head p {
+  margin: 12px 0 0;
+  max-width: 68ch;
+}
+
+.releases {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.rel {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 32px;
+  padding: 32px 0;
+  border-top: 1px solid var(--line);
+}
+
+.rel-side h2 {
+  font-size: 22px;
+}
+
+.rel-side .muted {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.rel-tag {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rel-tag.latest {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.rel-notes {
+  max-width: 72ch;
+}
+
+.rel-notes > :first-child {
+  margin-top: 0;
+}
+
+.rel-notes h3 {
+  margin: 22px 0 8px;
+  font-size: 17px;
+}
+
+.rel-notes p,
+.rel-notes ul {
+  margin: 0 0 12px;
+}
+
+.rel-notes ul {
+  padding-left: 20px;
+}
+
+.rel-notes li + li {
+  margin-top: 4px;
+}
+
+.rel-assets {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.rel-assets .muted {
+  font-size: 14px;
+}
+
 @media (max-width: 860px) {
   .hero {
     grid-template-columns: 1fr;
@@ -404,15 +506,23 @@ h3 {
   .steps,
   .notes,
   .split,
-  .downloads {
+  .downloads,
+  .rel {
     grid-template-columns: 1fr;
+  }
+  .rel {
+    gap: 12px;
   }
 }
 
 @media (max-width: 560px) {
   .top {
-    padding: 14px 16px;
+    height: auto;
+    padding: 12px 16px 0;
     flex-wrap: wrap;
+  }
+  .top nav {
+    height: 40px;
   }
   .top nav {
     gap: 16px;
@@ -420,7 +530,9 @@ h3 {
   }
   .hero,
   .band,
-  .foot {
+  .foot,
+  .page-head,
+  .releases {
     padding-left: 16px;
     padding-right: 16px;
   }

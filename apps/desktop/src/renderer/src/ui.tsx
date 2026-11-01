@@ -1,6 +1,9 @@
 import { CSSProperties, ReactNode, useEffect, useState } from 'react'
 import { BoxState, DesignObject, visibleRect } from '@sds/core/browser'
 import type { AppSnapshot } from '../../shared/api'
+import { tone } from './tones'
+
+export { tone }
 
 export function useSnapshot(): AppSnapshot | null {
   const [snap, setSnap] = useState<AppSnapshot | null>(null)
@@ -31,24 +34,6 @@ export function useOutside(name: string, open: boolean, close: () => void) {
     document.addEventListener('pointerdown', onDown, true)
     return () => document.removeEventListener('pointerdown', onDown, true)
   }, [name, open, close])
-}
-
-// Box fills, by source. Greys only: the boxes stand for sources, they aren't pictures of them.
-const TONE: Record<string, [string, string]> = {
-  Presentation: ['#d4d4d4', '#111'],
-  'Presentation 2': ['#a8a8a8', '#111'],
-  'Presentation 3': ['#bdbdbd', '#111'],
-  'Presentation 4': ['#969696', '#111'],
-  Static: ['#4d4d4d', '#eee'],
-  Wide: ['#363636', '#ddd'],
-  'Camera 3': ['#6a6a6a', '#f2f2f2'],
-  'Camera 4': ['#585858', '#f2f2f2'],
-  'Camera 5': ['#424242', '#eee'],
-  'Camera 6': ['#5f5f5f', '#f2f2f2'],
-}
-
-export function tone(o: DesignObject): [string, string] {
-  return ('role' in o.source && TONE[o.source.role]) || ['#585858', '#eee']
 }
 
 // Where a box's visible rectangle sits, as percentages of the frame.

@@ -379,7 +379,7 @@ superdupersource/
   apps/desktop/         Electron app; its renderer also runs in a plain browser on the simulator (built)
   apps/companion/       Companion module (built)
   packages/protocol/    types for the app <-> Companion link (built)
-  apps/site/            download page and /demo (built; superdupersource.kennedys.nz)
+  apps/site/            download page and release notes (built; superdupersource.kennedys.nz)
   spike/                phase 0 hardware tests (built, not yet run)
   Supersources-templates/  backgrounds and layout guides
 ```
@@ -392,9 +392,11 @@ Alternative considered: a .NET app using Blackmagic's official ATEM SDK. It's we
 
 Built (`apps/site`), served at `superdupersource.kennedys.nz` by CapRover, which rebuilds it from the GitHub repo on every push to `main`.
 
-- The hero is a live canvas running the real Slide 10 transitions (in from the presenter, out to the slides and back) with the app's own renderer, so there's no video to keep in sync with the app.
-- `/demo` is the desktop UI built for the browser, running on the simulator. Nothing to install; layouts are saved in the browser.
-- The download cards read the latest GitHub release at load time and offer the `.exe` and the Companion `.tgz` when a release has them. Until then they say there's no release yet, and the hero's second button reads "Downloads" instead of "Download for Windows".
+- Styled like the app since the 1 Nov 2026 redesign: greys and black, 2px corners, and the top bar as tabs (Overview, Releases, GitHub).
+- The hero is a live canvas running the real Slides + presenter transitions (in from the camera, out to the slides and back), drawn as flat boxes the way the app draws them, so there's no video to keep in sync with the app.
+- The in-browser demo at `/demo` was dropped on 1 Nov 2026; old links go to the home page.
+- The download cards read the latest GitHub release at load time and offer the `.exe` and the Companion `.tgz` when a release has them. The first button reads "Download for Windows" once there's an installer.
+- `/releases/` lists every GitHub release, newest first, with its notes and downloads. Notes come from `release-notes/v<version>.md`, which the release workflow publishes.
 - Supported switchers, honestly labelled (first to be tested / planned), and "not affiliated with or endorsed by Blackmagic Design" in the footer.
 - Light and dark themes, phone layout down to 375 px.
 
