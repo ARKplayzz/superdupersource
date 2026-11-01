@@ -142,26 +142,22 @@ interface Release {
   assets: Asset[]
 }
 
-function render(el: HTMLElement, release: Release | null, match: RegExp, what: string) {
+// A plain link to the file, then the version, date and size.
+function render(el: HTMLElement, release: Release | null, match: RegExp) {
   const asset = release?.assets.find((a) => match.test(a.name))
   el.replaceChildren()
   if (!release || !asset) {
-    el.textContent = release ? `The latest release (${release.tag_name}) doesn't include the ${what} yet.` : `No release yet. The first one comes after hardware testing.`
-    el.classList.add('muted')
+    el.textContent = 'Not released yet'
     return
   }
+  el.classList.remove('muted')
   const a = document.createElement('a')
-  a.className = 'btn primary'
   a.href = asset.browser_download_url
-  a.textContent = `Download ${asset.name}`
-  const meta = document.createElement('div')
+  a.textContent = asset.name
+  const meta = document.createElement('span')
   meta.className = 'muted num'
   const date = new Date(release.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-  meta.textContent = `${release.tag_name}, ${date}, ${fileSize(asset.size)}. `
-  const notes = document.createElement('a')
-  notes.href = '/releases/'
-  notes.textContent = "What's new"
-  meta.append(notes)
+  meta.textContent = `${release.tag_name.replace(/^v/, '')}, ${date}, ${fileSize(asset.size)}`
   el.append(a, meta)
 }
 
@@ -179,15 +175,13 @@ async function loadReleases() {
       el.replaceChildren()
       const link = document.createElement('a')
       link.href = `https://github.com/${REPO}/releases`
-      link.textContent = 'See releases on GitHub'
-      el.append("Couldn't check for releases. ", link)
+      link.textContent = 'See GitHub'
+      el.append("Couldn't check. ", link)
     }
     return
   }
-  render(app, release, /\.exe$/i, 'Windows installer')
-  // Once there's an installer, the hero's second button can say so.
-  if (release?.assets.some((a) => /\.exe$/i.test(a.name))) document.getElementById('hero-download')!.textContent = 'Download for Windows'
-  render(mod, release, /\.tgz$/i, 'Companion module')
+  render(app, release, /\.exe$/i)
+  render(mod, release, /\.tgz$/i)
 }
 void loadReleases()
 initReleases()

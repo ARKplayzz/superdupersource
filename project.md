@@ -395,7 +395,8 @@ Built (`apps/site`), served at `superdupersource.kennedys.nz` by CapRover, which
 - Styled like the app since the 1 Nov 2026 redesign: greys and black, 2px corners, and the top bar as tabs (Overview, Releases, GitHub).
 - The hero is a live canvas running the real Slides + presenter transitions (in from the camera, out to the slides and back), drawn as flat boxes the way the app draws them, so there's no video to keep in sync with the app.
 - The in-browser demo at `/demo` was dropped on 1 Nov 2026; old links go to the home page.
-- The download cards read the latest GitHub release at load time and offer the `.exe` and the Companion `.tgz` when a release has them. The first button reads "Download for Windows" once there's an installer.
+- One short page: a line on what it does, the animation, three steps, downloads and requirements. No logo; the name is written SuperDuperSource.kennedys.
+- The download rows read the latest GitHub release at load time and link the `.exe` and the Companion `.tgz`.
 - `/releases/` lists every GitHub release, newest first, with its notes and downloads. Notes come from `release-notes/v<version>.md`, which the release workflow publishes.
 - Supported switchers, honestly labelled (first to be tested / planned), and "not affiliated with or endorsed by Blackmagic Design" in the footer.
 - Light and dark themes, phone layout down to 375 px.

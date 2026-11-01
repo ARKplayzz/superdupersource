@@ -87,7 +87,8 @@ export const DEFAULT_SETTINGS: ShowSettings = {
   backgroundInput: 3010,
   groups: ['Main + side column', 'Grid'],
   localApi: { port: 8710, allowRemote: false },
-  connection: { mode: 'simulator', address: '' },
+  // A new install waits for a switcher address. The simulator is under Setup, Debug.
+  connection: { mode: 'atem', address: '' },
 }
 
 // The background a design's art fill comes from.

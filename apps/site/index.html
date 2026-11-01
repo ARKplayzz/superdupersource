@@ -3,18 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SuperDuperSource</title>
-    <meta name="description" content="Animated SuperSource takes for Blackmagic ATEM switchers. The camera on program shrinks into its box while the slides come in beside it, and it reverses on the way out." />
+    <title>SuperDuperSource.kennedys</title>
+    <meta name="description" content="Animated SuperSource takes for Blackmagic ATEM switchers, triggered from Companion." />
     <link rel="icon" type="image/png" href="/icon-32.png" />
-    <meta property="og:title" content="SuperDuperSource" />
+    <meta property="og:title" content="SuperDuperSource.kennedys" />
     <meta property="og:description" content="Animated SuperSource takes for Blackmagic ATEM switchers." />
   </head>
   <body>
     <header class="top">
-      <a class="brand" href="/">
-        <img src="/icon-32.png" alt="" width="20" height="20" />
-        SuperDuperSource <small>.kennedys</small>
-      </a>
+      <a class="brand" href="/">SuperDuperSource<span>.kennedys</span></a>
       <nav>
         <a href="/" aria-current="page">Overview</a>
         <a href="/releases/">Releases</a>
@@ -22,145 +19,58 @@
       </nav>
     </header>
 
-    <main>
-      <section class="hero">
-        <div class="hero-text">
-          <h1>Animated SuperSource takes for Blackmagic ATEM switchers</h1>
-          <p class="lead">
-            The camera on program shrinks into its box while the slides come in beside it. Taking it out runs the other way and lands on whatever
-            is on preview. The cut itself happens while both pictures are identical, so viewers don't see it.
-          </p>
-          <div class="actions">
-            <a class="btn primary" href="#download" id="hero-download">Downloads</a>
-            <a class="btn" href="/releases/">What's new</a>
-          </div>
-          <p class="status">Early release. The ATEM connection is written but hasn't been tested on a switcher yet, so the app also runs a built-in simulator.</p>
-        </div>
-        <figure class="hero-anim">
-          <canvas id="hero" width="960" height="540" aria-label="The Slides + presenter layout animating in from the static camera and out to the slides"></canvas>
-          <figcaption>
-            <span id="step" class="num">Program: Presenter cam</span>
-            <button id="pause" class="link" type="button">Pause</button>
-          </figcaption>
-        </figure>
+    <main class="page">
+      <section class="intro">
+        <h1>Animated SuperSource takes for ATEM switchers.</h1>
+        <p>
+          Take a SuperSource layout and the camera already on program shrinks into its box while the other boxes move in around it. Take it out and
+          it runs backwards to whatever is on preview.
+        </p>
       </section>
 
-      <section id="how" class="band">
-        <h2>How a take works</h2>
-        <ol class="steps">
-          <li>
-            <h3>Preview shows the finished layout</h3>
-            <p>Load a layout and it goes to preview in its final form, so the director sees exactly what will go to air.</p>
-          </li>
-          <li>
-            <h3>The cut is invisible</h3>
-            <p>
-              At the take, the box holding the source already on program starts full screen and uncropped. Program looks the same before and after
-              the cut.
-            </p>
-          </li>
-          <li>
-            <h3>The boxes move into place</h3>
-            <p>
-              Every box moves frame by frame, on its own timing and easing: 35 frames for a 700 ms move at 1080p50. Going out, the box for the source
-              on preview grows to full screen, then the switcher cuts to that source.
-            </p>
-          </li>
+      <figure class="anim">
+        <canvas id="hero" width="960" height="540" aria-label="The Slides + presenter layout animating in from the camera and out to the slides"></canvas>
+        <figcaption>
+          <span id="step" class="num">Program: Presenter cam</span>
+          <button id="pause" class="link" type="button">Pause</button>
+        </figcaption>
+      </figure>
+
+      <section>
+        <h2>How it works</h2>
+        <ol>
+          <li>Load a layout from Companion. It waits on preview, looking as it will on air.</li>
+          <li>At the take, the box with the program source starts full screen, so nobody sees the cut.</li>
+          <li>The boxes then move into the layout, frame by frame.</li>
         </ol>
-        <div class="notes">
-          <p>
-            <strong>Which box starts full screen</strong> depends on what's on air. If program is the presenter camera, the presenter box does. If it's
-            ME2 showing that camera, it still matches, unless ME2 has a key on air. If nothing matches, the layout cuts in as a normal SuperSource.
-          </p>
-          <p>
-            <strong>Takes from Companion</strong> (SS CUT and SS AUTO) animate. Takes from the switcher panel or ATEM Software Control don't, because the
-            app only hears about them after the switcher has already cut.
-          </p>
-        </div>
       </section>
 
-      <section class="band split">
-        <div>
-          <h2>Design</h2>
-          <p>
-            Drag, resize and crop boxes over the background, with grids or one of your cutout templates laid over the top. A box fits a template's
-            cutout in one click. Every source gets its own IN and OUT, set box by box along the bottom. Changes stay as a draft until you save.
-          </p>
-        </div>
-        <div>
-          <h2>Sources</h2>
-          <p>
-            Layouts name sources, not inputs: Presentation 1 to 4, Static, Wide and Camera 3 to 6. Set which input each one is once per venue, and
-            every layout follows. An M/E's program works as a source too.
-          </p>
-        </div>
-        <div>
-          <h2>Companion</h2>
-          <p>
-            The app holds the show's Active SuperSources, in the order of the Companion buttons. The module gives you SS CUT, SS AUTO and a button
-            per layout, green on preview and red on program. Needs Companion 4.3 or later.
-          </p>
-        </div>
-      </section>
-
-      <section id="download" class="band">
+      <section id="download">
         <h2>Download</h2>
-        <div class="downloads">
-          <article class="card">
-            <h3>Windows app</h3>
-            <p class="muted">Windows 10 or 11. Runs in the tray on the control PC.</p>
-            <div id="app-release" class="release">Checking for a release…</div>
-          </article>
-          <article class="card">
-            <h3>Companion module</h3>
-            <p class="muted">In Companion 4.3 or later, open Modules and import the .tgz. The app's Setup tab can fetch it for you.</p>
-            <div id="module-release" class="release">Checking for a release…</div>
-          </article>
+        <div class="dl">
+          <div>Windows app</div>
+          <div id="app-release" class="release muted">Checking…</div>
         </div>
-        <p class="muted">
-          Earlier versions and what changed are on <a href="/releases/">Releases</a>. To build from source, clone the repo, run <code>npm install</code>,
-          then <code>npm run dev -w @sds/desktop</code>. The <a href="https://github.com/ARKplayzz/superdupersource#readme">README</a> has the details.
-        </p>
+        <div class="dl">
+          <div>Companion module</div>
+          <div id="module-release" class="release muted">Checking…</div>
+        </div>
+        <p class="muted">Not yet tested on a real switcher.</p>
       </section>
 
-      <section class="band">
-        <h2>Switchers</h2>
-        <table class="switchers">
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th class="num">SuperSources</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>ATEM 2 M/E Production Studio 4K</td>
-              <td class="num">1</td>
-              <td>First to be tested</td>
-            </tr>
-            <tr>
-              <td>ATEM 2 M/E Constellation (HD and 4K)</td>
-              <td class="num">1</td>
-              <td>Planned</td>
-            </tr>
-            <tr>
-              <td>ATEM 4 M/E Constellation 4K</td>
-              <td class="num">2</td>
-              <td>Planned</td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="muted">
-          Other ATEM models with SuperSource aren't on the test list. The app doesn't assume a model: it reads how many SuperSources and boxes the
-          switcher has when it connects.
-        </p>
+      <section>
+        <h2>Needs</h2>
+        <ul>
+          <li>Windows 10 or 11</li>
+          <li>ATEM 2 M/E Production Studio 4K, 2 M/E Constellation or 4 M/E Constellation 4K</li>
+          <li>Companion 4.3 or later</li>
+        </ul>
       </section>
     </main>
 
     <footer class="foot">
-      <span>MIT licence. <a href="https://github.com/ARKplayzz/superdupersource">Source on GitHub</a></span>
-      <span>Not affiliated with or endorsed by Blackmagic Design.</span>
+      <span>MIT licence</span>
+      <span>Not affiliated with Blackmagic Design.</span>
     </footer>
 
     <script type="module" src="/src/main.ts"></script>

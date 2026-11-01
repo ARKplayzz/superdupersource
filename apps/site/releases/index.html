@@ -3,16 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Releases: SuperDuperSource</title>
+    <title>Releases, SuperDuperSource.kennedys</title>
     <meta name="description" content="Every SuperDuperSource release, with what changed and the downloads." />
     <link rel="icon" type="image/png" href="/icon-32.png" />
   </head>
   <body>
     <header class="top">
-      <a class="brand" href="/">
-        <img src="/icon-32.png" alt="" width="20" height="20" />
-        SuperDuperSource <small>.kennedys</small>
-      </a>
+      <a class="brand" href="/">SuperDuperSource<span>.kennedys</span></a>
       <nav>
         <a href="/">Overview</a>
         <a href="/releases/" aria-current="page">Releases</a>
@@ -20,21 +17,16 @@
       </nav>
     </header>
 
-    <main>
-      <div class="page-head">
-        <h1>Releases</h1>
-        <p class="muted">
-          What changed in each version, newest first. The app checks for updates on its own and installs them when it next quits.
-        </p>
-      </div>
+    <main class="page">
+      <h1>Releases</h1>
       <div id="release-list" class="releases">
-        <p class="muted">Loading releases…</p>
+        <p class="muted">Loading…</p>
       </div>
     </main>
 
     <footer class="foot">
-      <span>MIT licence. <a href="https://github.com/ARKplayzz/superdupersource">Source on GitHub</a></span>
-      <span>Not affiliated with or endorsed by Blackmagic Design.</span>
+      <span>MIT licence</span>
+      <span>Not affiliated with Blackmagic Design.</span>
     </footer>
 
     <script type="module" src="/src/main.ts"></script>
