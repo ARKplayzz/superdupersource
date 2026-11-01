@@ -145,6 +145,26 @@ li + li {
   padding: 48px 20px 64px;
 }
 
+.intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+  margin-bottom: -44px; /* the mascot stands on the animation below */
+}
+
+.intro > div {
+  padding-bottom: 32px;
+}
+
+/* The mascot: decorative, standing at the right of the intro. */
+.mascot {
+  display: block;
+  width: auto;
+  height: 220px;
+  margin-right: 12px;
+}
+
 .intro p {
   margin: 12px 0 0;
   color: var(--muted);
@@ -302,5 +322,9 @@ li + li {
   .rel {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+  .mascot {
+    height: 150px;
+    margin-right: 0;
   }
 }
