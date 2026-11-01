@@ -147,7 +147,7 @@ li + li {
 
 .intro {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: end;
   gap: 24px;
   margin-bottom: -44px; /* the mascot stands on the animation below */
@@ -157,12 +157,12 @@ li + li {
   padding-bottom: 32px;
 }
 
-/* The mascot: decorative, standing at the right of the intro. */
+/* The mascot: decorative, standing at the left of the intro, just above the animation. */
 .mascot {
   display: block;
   width: auto;
   height: 220px;
-  margin-right: 12px;
+  margin-bottom: 6px;
 }
 
 .intro p {
@@ -325,6 +325,5 @@ li + li {
   }
   .mascot {
     height: 150px;
-    margin-right: 0;
   }
 }

@@ -1,9 +1,9 @@
-import { BoxState, DesignObject, SLIDE_10, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, visibleRect, type Direction } from '@sds/core/browser'
+import { BoxState, DesignObject, SLIDE_10_PUSH, SimSwitcher, durationMs, inputFor, DEFAULT_SETTINGS, resolveTransition, statesAt, visibleRect, type Direction } from '@sds/core/browser'
 import { tone } from '../../desktop/src/renderer/src/tones'
 import { fileSize, initReleases } from './releases'
 import './styles.css'
 
-// ---------- hero: the real Slides + presenter transitions, drawn the way the app draws layouts ----------
+// ---------- hero: the real Slides + presenter (push) transitions, drawn the way the app draws layouts ----------
 
 const canvas = document.getElementById('hero') as HTMLCanvasElement | null
 const stepLabel = document.getElementById('step')
@@ -53,21 +53,24 @@ function drawFlat(g: CanvasRenderingContext2D, boxes: { object: DesignObject; st
   }
 }
 
+// The pushed copy: the boxes move as one, each riding against the box going full screen.
+const LAYOUT = SLIDE_10_PUSH
+
 type Beat = { kind: 'hold'; ms: number; dir: Direction; matched: string; at: 'start' | 'end'; label: string } | { kind: 'move'; dir: Direction; matched: string; label: string }
 
-// Camera full screen -> layout -> slides full screen -> layout -> camera full screen, looping.
+// Starts on the finished layout, then: out to the slides, back in, out to the camera, back in.
 const BEATS: Beat[] = [
-  { kind: 'hold', ms: 1400, dir: 'in', matched: 'B', at: 'start', label: 'Program: Presenter cam' },
-  { kind: 'move', dir: 'in', matched: 'B', label: 'SS CUT: in from Static' },
   { kind: 'hold', ms: 1800, dir: 'in', matched: 'B', at: 'end', label: 'Program: Slides + presenter' },
   { kind: 'move', dir: 'out', matched: 'A', label: 'SS CUT: out to Presentation' },
   { kind: 'hold', ms: 1400, dir: 'out', matched: 'A', at: 'end', label: 'Program: Slides PC' },
   { kind: 'move', dir: 'in', matched: 'A', label: 'SS CUT: in from Presentation' },
   { kind: 'hold', ms: 1800, dir: 'in', matched: 'A', at: 'end', label: 'Program: Slides + presenter' },
   { kind: 'move', dir: 'out', matched: 'B', label: 'SS CUT: out to Static' },
+  { kind: 'hold', ms: 1400, dir: 'out', matched: 'B', at: 'end', label: 'Program: Presenter cam' },
+  { kind: 'move', dir: 'in', matched: 'B', label: 'SS CUT: in from Static' },
 ]
 
-const beatLength = (b: Beat) => (b.kind === 'hold' ? b.ms : durationMs(resolveTransition(SLIDE_10, b.dir, b.matched)))
+const beatLength = (b: Beat) => (b.kind === 'hold' ? b.ms : durationMs(resolveTransition(LAYOUT, b.dir, b.matched)))
 const loopMs = BEATS.reduce((s, b) => s + beatLength(b), 0)
 
 function frameAt(t: number) {
@@ -75,10 +78,10 @@ function frameAt(t: number) {
   for (const b of BEATS) {
     const len = beatLength(b)
     if (ms <= len) {
-      const rt = resolveTransition(SLIDE_10, b.dir, b.matched)
+      const rt = resolveTransition(LAYOUT, b.dir, b.matched)
       const at = b.kind === 'move' ? ms : b.at === 'start' ? 0 : Infinity
       const states = statesAt(rt, at)
-      const boxes = rt.tracks.map((tr, i) => ({ object: SLIDE_10.objects.find((o) => o.id === tr.objectId)!, state: states[i] }))
+      const boxes = rt.tracks.map((tr, i) => ({ object: LAYOUT.objects.find((o) => o.id === tr.objectId)!, state: states[i] }))
       return { boxes, label: b.label }
     }
     ms -= len
@@ -87,7 +90,7 @@ function frameAt(t: number) {
 }
 
 let playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-let elapsed = playing ? 0 : 1400 + 700 + 100 // reduced motion: show the finished layout
+let elapsed = 0 // the first beat is the finished layout, which is also what reduced motion shows
 let last = performance.now()
 let lastLabel = ''
 
