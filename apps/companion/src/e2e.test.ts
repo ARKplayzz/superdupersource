@@ -1,6 +1,6 @@
 // The module's client against the app's real local API server, with the simulator underneath.
 import { afterEach, describe, expect, test } from 'vitest'
-import { DEFAULT_SETTINGS, Engine, STARTER_DESIGNS, SimSwitcher } from '@sds/core'
+import { DEFAULT_SETTINGS, Engine, SLIDE_10, STARTER_DESIGNS, SimSwitcher } from '@sds/core'
 import type { RemoteState } from '@sds/protocol'
 import { LocalApi } from '../../desktop/src/main/localApi'
 import { AppConnection } from './connection.js'
@@ -23,7 +23,8 @@ function until(pred: () => boolean, timeoutMs = 3000): Promise<void> {
 function setup() {
   const switcher = new SimSwitcher({ fps: 50, mixFrames: 10 })
   switcher.start()
-  const designs = structuredClone(STARTER_DESIGNS)
+  // The original Slides + presenter, whose IN and OUT the test follows, plus everything that ships.
+  const designs = structuredClone([SLIDE_10, ...STARTER_DESIGNS])
   const shortlist = ['slide-10', 'slide-11']
   const engine = new Engine(switcher, DEFAULT_SETTINGS, designs)
   const api = new LocalApi({ engine, switcher, designs: () => designs, shortlist: () => shortlist, settings: () => DEFAULT_SETTINGS, version: 'test' })
@@ -164,7 +165,7 @@ describe('definitions', () => {
     const p = presets(t.conn.state, 'sds')
     expect(p.structure.map((s) => s.id)).toEqual(['takes', 'layouts'])
     const groups = p.structure[1].definitions as { name: string; presets: string[] }[]
-    expect(groups.map((g) => g.name)).toEqual(['Main + side column', 'Grid'])
+    expect(groups.map((g) => g.name)).toEqual(['Default Pres', 'Default Grid'])
     expect(groups[0].presets.slice(0, 2)).toEqual(['layout-slide-10', 'layout-slide-11'])
     expect(p.presets['next-take']).toMatchObject({ style: { text: '$(sds:next_take)' } })
 

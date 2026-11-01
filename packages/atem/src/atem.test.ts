@@ -148,7 +148,7 @@ describe('AtemSwitcher', () => {
 
   test('a load sets art behind, arms the layout and selects it on preview', async () => {
     const { sw, fake } = await connected()
-    const engine = new Engine(sw, VENUE, STARTER_DESIGNS)
+    const engine = new Engine(sw, VENUE, [SLIDE_10, ...STARTER_DESIGNS])
     await engine.load('slide-10')
     expect(fake.art).toEqual([{ props: { artFillSource: 3010, artOption: Enums.SuperSourceArtOption.Background }, ss: 0 }])
     expect(sw.getState().mixEffects[0].preview).toBe(ssInput(0))
@@ -157,7 +157,7 @@ describe('AtemSwitcher', () => {
 
   test('an animated take streams one batch per frame, 20 ms apart at 1080p50', async () => {
     const { sw, fake, clock } = await connected()
-    const engine = new Engine(sw, VENUE, STARTER_DESIGNS)
+    const engine = new Engine(sw, VENUE, [SLIDE_10, ...STARTER_DESIGNS])
     await engine.load('slide-10')
     fake.sent = []
     const t0 = clock.now()
@@ -182,7 +182,7 @@ describe('AtemSwitcher', () => {
 
   test('OUT ends with a cut to the source on preview, then restores the layout', async () => {
     const { sw, fake } = await connected()
-    const engine = new Engine(sw, VENUE, STARTER_DESIGNS)
+    const engine = new Engine(sw, VENUE, [SLIDE_10, ...STARTER_DESIGNS])
     await engine.load('slide-10')
     await engine.take()
     await fake.sendCommands([new Commands.PreviewInputCommand(0, 2)]) // operator puts the slides on preview

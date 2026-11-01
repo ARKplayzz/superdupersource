@@ -86,7 +86,7 @@ export const DEFAULT_SETTINGS: ShowSettings = {
   animateWithKeysOnAir: false,
   takeMe: 0,
   backgroundInput: 3010,
-  groups: ['Main + side column', 'Grid'],
+  groups: ['Default Pres', 'Default Grid'],
   localApi: { port: 8710, allowRemote: false },
   // A new install waits for a switcher address. The simulator is under Setup, Debug.
   connection: { mode: 'atem', address: '' },

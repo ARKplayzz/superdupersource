@@ -30,7 +30,7 @@ export function App() {
   const snap = useSnapshot()
   const width = useWidth()
   const [tab, setTab] = useState<Tab>('layouts')
-  const [editing, setEditing] = useState<string>('slide-10')
+  const [editing, setEditing] = useState<string>('slide-10-push')
   const [toast, setToast] = useState<string | null>(null)
   const [library, setLibrary] = useState(true)
   // null follows the window: the Design tab's Library starts hidden when the window is narrow.

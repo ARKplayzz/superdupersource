@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS, Design, DesignObject, ShowSettings } from './model'
+import { DEFAULT_SETTINGS, Design, DesignObject, Motion, Placement, ShowSettings } from './model'
+import { DEFAULT_MATCHED_MOTION } from './transitions'
 import { box } from './units'
 
 // Starter designs built from the cutout templates in Supersources-templates/.
@@ -16,19 +17,49 @@ const obj = (id: string, name: string, role: string, final: DesignObject['final'
   matchPriority,
 })
 
-// Main + side column family share the big slides box.
-const MAIN = box({ x: -4, y: 0, size: 0.75 })
+// Default motion times, a little slower than the switcher-panel feel: IN and OUT for the box going
+// full screen. Boxes riding against it take the same timing.
+const IN_MS = DEFAULT_MATCHED_MOTION.in.durationMs
+const OUT_MS = DEFAULT_MATCHED_MOTION.out.durationMs
 
+// Every IN and OUT for a layout. `others` picks what the boxes not going full screen do:
+// 'pushed' rides against the full-screen box; 'in-place' stays put and is revealed or covered.
+function transitions(ids: string[], others: (matched: string) => Placement): Design['transitions'] {
+  const out: Design['transitions'] = {}
+  for (const dir of ['in', 'out'] as const) {
+    const ms = dir === 'in' ? IN_MS : OUT_MS
+    for (const matched of ids) {
+      const placement = others(matched)
+      out[`${dir}:${matched}`] = Object.fromEntries(
+        ids.map((id): [string, Motion] =>
+          id === matched
+            ? [id, { delayMs: 0, durationMs: ms, easing: 'easeInOutCubic' }]
+            : [id, placement === 'pushed' ? { placement, delayMs: 0, durationMs: ms, easing: 'easeInOutCubic' } : { placement, delayMs: 0, durationMs: 0, easing: 'linear' }],
+        ),
+      )
+    }
+  }
+  return out
+}
+const PUSHED = () => 'pushed' as const
+const IN_PLACE = () => 'in-place' as const
+
+export const GROUP_PRES = 'Default Pres'
+export const GROUP_GRID = 'Default Grid'
+
+// The slides family share the big presentation box.
+const MAIN = box({ x: -4, y: 0, size: 0.75 })
+const PRESENTER = box({ x: 12, y: 0, size: 0.5, cropL: 8, cropR: 8 })
+
+// The original Slides + presenter, with hand-set motions (camera revealed, slides sliding in).
+// No longer shipped: the pushed version replaced it. Kept for the tests of custom and reversed motion.
 export const SLIDE_10: Design = {
   id: 'slide-10',
   name: 'Slides + presenter',
-  group: 'Main + side column',
+  group: GROUP_PRES,
   background: BACKGROUND,
   guide: 'Slide_10.PNG',
-  objects: [
-    obj('A', 'Presentation', 'Presentation', MAIN, 2),
-    obj('B', 'Static', 'Static', box({ x: 12, y: 0, size: 0.5, cropL: 8, cropR: 8 }), 1),
-  ],
+  objects: [obj('A', 'Presentation', 'Presentation', MAIN, 2), obj('B', 'Static', 'Static', PRESENTER, 1)],
   transitions: {
     'in:B': {
       B: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
@@ -49,48 +80,36 @@ export const SLIDE_10: Design = {
   },
 }
 
-// The same layout, but the box that isn't going full screen rides against the other one's edge:
-// the slides push the static camera off (and pull it back in), and the camera pushes the slides.
+// Slides and the presenter camera. Each box rides against the other: the slides push the camera off
+// (and pull it back in), and the camera pushes the slides. Keeps the id of the old push copy so
+// shortlists and Companion buttons carry on.
 export const SLIDE_10_PUSH: Design = {
-  ...SLIDE_10,
   id: 'slide-10-push',
-  name: 'Slides + presenter (push)',
-  transitions: {
-    'in:B': {
-      B: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
-      A: { placement: 'pushed', delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
-    },
-    'in:A': {
-      A: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
-      B: { placement: 'pushed', delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
-    },
-    'out:B': {
-      B: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
-      A: { placement: 'pushed', delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
-    },
-    'out:A': {
-      A: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
-      B: { placement: 'pushed', delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
-    },
-  },
+  name: 'Slides + Presenter',
+  group: GROUP_PRES,
+  background: BACKGROUND,
+  guide: 'Slide_10.PNG',
+  objects: [obj('A', 'Presentation', 'Presentation', MAIN, 2), obj('B', 'Static', 'Static', PRESENTER, 1)],
+  transitions: transitions(['A', 'B'], PUSHED),
 }
 
 const SIDE = (y: number) => box({ x: 12, y, size: 0.25 })
 
+// The slides push the cameras; a camera going full screen grows over the others, which stay put.
 export const SLIDE_11: Design = {
   id: 'slide-11',
-  name: 'Slides + two side boxes',
-  group: 'Main + side column',
+  name: 'Slides + Two Presenters',
+  group: GROUP_PRES,
   background: BACKGROUND,
   guide: 'Slide_11.PNG',
   objects: [obj('A', 'Presentation', 'Presentation', MAIN, 3), obj('B', 'Static', 'Static', SIDE(3), 1), obj('C', 'Wide', 'Wide', SIDE(-3), 2)],
-  transitions: {},
+  transitions: transitions(['A', 'B', 'C'], (m) => (m === 'A' ? 'pushed' : 'in-place')),
 }
 
 export const SLIDE_12: Design = {
   id: 'slide-12',
-  name: 'Slides + three side boxes',
-  group: 'Main + side column',
+  name: 'Slides + Three Presenters',
+  group: GROUP_PRES,
   background: BACKGROUND,
   guide: 'Slide_12.PNG',
   objects: [
@@ -99,40 +118,61 @@ export const SLIDE_12: Design = {
     obj('C', 'Wide', 'Wide', SIDE(0), 2),
     obj('D', 'Camera 3', 'Camera 3', SIDE(-4.5), 3),
   ],
-  transitions: {},
+  transitions: transitions(['A', 'B', 'C', 'D'], PUSHED),
 }
+
+// Two 16:9 presentations side by side, at 49% each.
+export const TWO_PRESENTATIONS: Design = {
+  id: 'two-presentations',
+  name: 'Two Presentations',
+  group: GROUP_PRES,
+  background: BACKGROUND,
+  objects: [
+    obj('A', 'Presentation', 'Presentation', box({ x: -7.9, y: 0, size: 0.49 }), 1),
+    obj('B', 'Presentation 2', 'Presentation 2', box({ x: 7.9, y: 0, size: 0.49 }), 2),
+  ],
+  transitions: transitions(['A', 'B'], PUSHED),
+}
+
+const TWO = [
+  obj('A', 'Static', 'Static', box({ x: -7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 1),
+  obj('B', 'Camera 3', 'Camera 3', box({ x: 7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 2),
+]
 
 export const SLIDE_02: Design = {
   id: 'slide-02',
-  name: 'Two up',
-  group: 'Grid',
+  name: 'Two Presenters',
+  group: GROUP_GRID,
   background: BACKGROUND,
   guide: 'Slide_02.PNG',
-  objects: [
-    obj('A', 'Static', 'Static', box({ x: -7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 1),
-    obj('B', 'Presentation', 'Presentation', box({ x: 7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 2),
-  ],
-  transitions: {},
+  objects: TWO,
+  transitions: transitions(['A', 'B'], IN_PLACE),
 }
 
+export const SLIDE_02_PUSH: Design = { ...SLIDE_02, id: 'slide-02-push', name: 'Two Presenters Push', transitions: transitions(['A', 'B'], PUSHED) }
+
 const PORTRAIT = (x: number) => box({ x, y: 0, size: 0.7, cropL: 8.5, cropR: 8.5 })
+const THREE = [obj('A', 'Wide', 'Wide', PORTRAIT(-10.5), 2), obj('B', 'Static', 'Static', PORTRAIT(0), 1), obj('C', 'Camera 3', 'Camera 3', PORTRAIT(10.5), 3)]
 
 export const SLIDE_03: Design = {
   id: 'slide-03',
-  name: 'Three portrait',
-  group: 'Grid',
+  name: 'Three Presenters',
+  group: GROUP_GRID,
   background: BACKGROUND,
   guide: 'Slide_03.PNG',
-  objects: [obj('A', 'Wide', 'Wide', PORTRAIT(-10.5), 2), obj('B', 'Static', 'Static', PORTRAIT(0), 1), obj('C', 'Camera 3', 'Camera 3', PORTRAIT(10.5), 3)],
-  transitions: {},
+  objects: THREE,
+  transitions: transitions(['A', 'B', 'C'], IN_PLACE),
 }
+
+export const SLIDE_03_PUSH: Design = { ...SLIDE_03, id: 'slide-03-push', name: 'Three Presenters Push', transitions: transitions(['A', 'B', 'C'], PUSHED) }
 
 const QUAD = (x: number, y: number) => box({ x, y, size: 0.4 })
 
+// Not pushed: the box going full screen grows over the other three, which stay where they are.
 export const SLIDE_04: Design = {
   id: 'slide-04',
-  name: 'Four up',
-  group: 'Grid',
+  name: 'Four Grid',
+  group: GROUP_GRID,
   background: BACKGROUND,
   guide: 'Slide_04.PNG',
   objects: [
@@ -141,24 +181,13 @@ export const SLIDE_04: Design = {
     obj('C', 'Wide', 'Wide', QUAD(-6.4, -3.55), 3),
     obj('D', 'Camera 3', 'Camera 3', QUAD(6.4, -3.55), 4),
   ],
-  transitions: {},
-}
-
-// Two 16:9 boxes with the same 0.8 unit margin at the edges and between them.
-export const TWO_PRESENTATIONS: Design = {
-  id: 'two-presentations',
-  name: 'Two presentations',
-  group: 'Grid',
-  background: BACKGROUND,
-  objects: [
-    obj('A', 'Presentation', 'Presentation', box({ x: -7.8, y: 0, size: 0.4625 }), 1),
-    obj('B', 'Presentation 2', 'Presentation 2', box({ x: 7.8, y: 0, size: 0.4625 }), 2),
-  ],
-  transitions: {},
+  transitions: transitions(['A', 'B', 'C', 'D'], IN_PLACE),
 }
 
 // Slides 05 and 06 need 5 and 6 boxes, more than one SuperSource has. Static only in v1 (project.md §4.4).
-export const STARTER_DESIGNS: Design[] = [SLIDE_10, SLIDE_10_PUSH, SLIDE_11, SLIDE_12, SLIDE_02, TWO_PRESENTATIONS, SLIDE_03, SLIDE_04]
+export const STARTER_DESIGNS: Design[] = [SLIDE_10_PUSH, SLIDE_11, SLIDE_12, TWO_PRESENTATIONS, SLIDE_02, SLIDE_02_PUSH, SLIDE_03, SLIDE_03_PUSH, SLIDE_04]
+
+export const DEFAULT_SHORTLIST = ['slide-10-push', 'slide-11', 'slide-02', 'slide-04']
 
 // The sources a show has, in the order the Sources page lists them.
 export const DEFAULT_ROLES = Object.keys(DEFAULT_SETTINGS.roles)
@@ -199,4 +228,62 @@ export function mergeNewStarters(designs: Design[], known?: string[]): { designs
   const have = new Set(designs.map((d) => d.id))
   const added = STARTER_DESIGNS.filter((d) => !seen.has(d.id) && !have.has(d.id))
   return { designs: [...designs, ...added], known: [...new Set([...seen, ...STARTER_DESIGNS.map((d) => d.id)])], added: added.map((d) => d.id) }
+}
+
+// Which set of starter layouts a show was last brought up to. Set 2 (Default Pres and Default Grid)
+// renamed and regrouped the starters and dropped the original Slides + presenter.
+export const STARTER_SET = 2
+const GROUP_RENAMES: Record<string, string> = { 'Main + side column': GROUP_PRES, Grid: GROUP_GRID }
+
+// One-time update of a saved show to the current starter set: starter layouts are replaced with
+// this version's (by id), the old Slides + presenter goes (its pushed copy takes its place in the
+// shortlist), and layouts in the old groups move to the new ones. Layouts the user made are kept.
+export function refreshStarters(
+  show: { designs: Design[]; shortlist: string[]; settings: ShowSettings },
+  set = 1,
+): { designs: Design[]; shortlist: string[]; settings: ShowSettings; set: number } {
+  if (set >= STARTER_SET) return { ...show, set }
+  const starters = new Map(STARTER_DESIGNS.map((d) => [d.id, d]))
+  const designs = show.designs
+    .filter((d) => d.id !== 'slide-10')
+    .map((d) => starters.get(d.id) ?? { ...d, group: GROUP_RENAMES[d.group] ?? d.group })
+  let shortlist = show.shortlist.map((id) => (id === 'slide-10' ? 'slide-10-push' : id))
+  shortlist = shortlist.filter((id, i) => shortlist.indexOf(id) === i)
+  const groups = [GROUP_PRES, GROUP_GRID, ...show.settings.groups.map((g) => GROUP_RENAMES[g] ?? g).filter((g) => g !== GROUP_PRES && g !== GROUP_GRID)]
+  return { designs, shortlist, settings: { ...show.settings, groups }, set: STARTER_SET }
+}
+
+// A show as saved, from any version. Older saves miss some fields.
+export interface SavedShow {
+  designs?: Design[]
+  shortlist?: string[]
+  settings?: Partial<ShowSettings>
+  knownStarters?: string[]
+  starterSet?: number
+}
+
+export interface CurrentShow {
+  designs: Design[]
+  shortlist: string[]
+  settings: ShowSettings
+  knownStarters: string[]
+  starterSet: number
+}
+
+export const freshShow = (): CurrentShow => ({
+  designs: STARTER_DESIGNS,
+  shortlist: DEFAULT_SHORTLIST,
+  settings: DEFAULT_SETTINGS,
+  knownStarters: STARTER_DESIGNS.map((d) => d.id),
+  starterSet: STARTER_SET,
+})
+
+// Brings any saved show up to date: the starter set, starters new in this version, then renamed roles.
+export function upgradeShow(saved: SavedShow): CurrentShow {
+  if (!saved.designs?.length) return { ...freshShow(), shortlist: saved.shortlist ?? DEFAULT_SHORTLIST }
+  const settings = { ...DEFAULT_SETTINGS, ...saved.settings }
+  const refreshed = refreshStarters({ designs: saved.designs, shortlist: saved.shortlist ?? DEFAULT_SHORTLIST, settings }, saved.starterSet ?? 1)
+  const merged = mergeNewStarters(refreshed.designs, saved.knownStarters)
+  const current = migrateShow(merged.designs, refreshed.settings)
+  return { designs: current.designs, shortlist: refreshed.shortlist, settings: current.settings, knownStarters: merged.known, starterSet: refreshed.set }
 }

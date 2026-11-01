@@ -55,7 +55,7 @@ npm run typecheck
 
 ## Trying a take
 
-1. On the **SuperSources** tab, click *Slides + presenter*. It loads into SuperSource 1 and goes to preview.
+1. On the **SuperSources** tab, click *Slides + Presenter*. It loads into SuperSource 1 and goes to preview.
 2. Open **Simulator** (bottom of the left rail). Program shows the presenter camera.
 3. Press **SS CUT**. The camera shrinks into the right-hand strip while the slides are revealed.
 4. Put *CAM2* (the slides) on preview and press **SS CUT** again. The slides grow to full screen and the switcher cuts to them.
@@ -99,7 +99,7 @@ Installed copies check for updates about 15 seconds after starting and every 6 h
 
 ## Download page
 
-`apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slides + presenter transitions, drawn the way the app draws layouts. It links the latest GitHub release, and `/releases/` lists every release with its notes.
+`apps/site` is the page at superdupersource.kennedys.nz. Its hero runs the real Slides + Presenter transitions, drawn the way the app draws layouts. It links the latest GitHub release, and `/releases/` lists every release with its notes.
 
 ```bash
 npm run dev -w @sds/site

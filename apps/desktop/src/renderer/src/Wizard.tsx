@@ -12,7 +12,8 @@ const DEFAULT_PLACES: BoxState[] = [
   box({ x: 6.4, y: -3.55, size: 0.4 }),
 ]
 const IDS = 'ABCD'
-const BASES = STARTER_DESIGNS.filter((d) => d.id !== 'slide-10-push')
+// Push variants start from the same boxes as their regular layout, so they aren't offered twice.
+const BASES = STARTER_DESIGNS.filter((d) => !d.name.endsWith(' Push'))
 
 export function Wizard({ snap, onClose, onCreated }: { snap: AppSnapshot; onClose: () => void; onCreated: (id: string) => void }) {
   const roles = Object.keys(snap.settings.roles)

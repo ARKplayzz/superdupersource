@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { Engine } from './engine'
 import { lerpBox, offscreen, visibleRect } from './geometry'
-import { SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, mergeNewStarters, migrateShow } from './library'
+import { GROUP_GRID, GROUP_PRES, SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, mergeNewStarters, migrateShow, upgradeShow } from './library'
 import { findMatch, resolveSource } from './matching'
 import { DEFAULT_SETTINGS, ShowSettings } from './model'
 import { planIn, planOut } from './plan'
@@ -15,6 +15,8 @@ const SLIDES = DEFAULT_SETTINGS.roles.Presentation
 const WIDE = DEFAULT_SETTINGS.roles.Wide
 const settings: ShowSettings = { ...DEFAULT_SETTINGS }
 const byId = (id: string) => STARTER_DESIGNS.find((d) => d.id === id)!
+// The engine tests use the original Slides + presenter, whose hand-set motions they check.
+const DESIGNS = [SLIDE_10, ...STARTER_DESIGNS]
 
 function sim() {
   return new SimSwitcher({ fps: 50 })
@@ -67,11 +69,45 @@ describe('geometry', () => {
 })
 
 describe('starter designs', () => {
-  test('two presentations have the same margin at the edges and between them', () => {
+  test('two presentations sit side by side at 49%, mirrored about the centre', () => {
     const [l, r] = TWO_PRESENTATIONS.objects.map((o) => visibleRect(o.final))
-    expect(l.l + 16).toBeCloseTo(0.8, 6)
-    expect(r.l - l.r).toBeCloseTo(0.8, 6)
-    expect(16 - r.r).toBeCloseTo(0.8, 6)
+    expect(l.l).toBeCloseTo(-r.r, 6)
+    expect(l.r).toBeCloseTo(-r.l, 6)
+    expect(r.l - l.r).toBeGreaterThan(0) // they don't overlap
+    expect(l.l).toBeGreaterThan(-16) // and stay inside the frame
+  })
+
+  test('the shipped layouts are grouped into Default Pres and Default Grid', () => {
+    expect(new Set(STARTER_DESIGNS.map((d) => d.group))).toEqual(new Set([GROUP_PRES, GROUP_GRID]))
+    expect(STARTER_DESIGNS.map((d) => d.name)).toEqual([
+      'Slides + Presenter',
+      'Slides + Two Presenters',
+      'Slides + Three Presenters',
+      'Two Presentations',
+      'Two Presenters',
+      'Two Presenters Push',
+      'Three Presenters',
+      'Three Presenters Push',
+      'Four Grid',
+    ])
+  })
+
+  test('Four Grid and the regular presenter layouts leave the other boxes in place', () => {
+    for (const id of ['slide-04', 'slide-02', 'slide-03']) {
+      const rt = resolveTransition(byId(id), 'in', 'A')
+      expect(rt.tracks.slice(1).every((t) => t.motion.placement === 'in-place' && !t.follow)).toBe(true)
+    }
+    for (const id of ['slide-02-push', 'slide-03-push']) {
+      const rt = resolveTransition(byId(id), 'in', 'A')
+      expect(rt.tracks.slice(1).some((t) => t.follow)).toBe(true)
+    }
+  })
+
+  test('Slides + Two Presenters pushes for the slides, and leaves boxes in place for the cameras', () => {
+    const slides = resolveTransition(byId('slide-11'), 'out', 'A')
+    expect(slides.tracks.slice(1).every((t) => t.follow)).toBe(true)
+    const camera = resolveTransition(byId('slide-11'), 'out', 'B')
+    expect(camera.tracks.slice(1).every((t) => t.motion.placement === 'in-place' && !t.follow)).toBe(true)
   })
 
 
@@ -119,7 +155,7 @@ describe('transitions', () => {
   })
 
   test('no custom motion means pushed', () => {
-    const { motion, origin } = motionFor(byId('slide-11'), 'in', 'B', 'A')
+    const { motion, origin } = motionFor({ ...byId('slide-11'), transitions: {} }, 'in', 'B', 'A')
     expect(origin).toBe('default')
     expect(motion.placement).toBe('pushed')
   })
@@ -154,12 +190,12 @@ describe('pushed boxes', () => {
 
   test('a pushed box takes the full-screen box timing', () => {
     const rt = resolveTransition(SLIDE_10_PUSH, 'out', 'A')
-    expect(rt.tracks[1].motion).toMatchObject({ placement: 'pushed', durationMs: 600, delayMs: 0 })
+    expect(rt.tracks[1].motion).toMatchObject({ placement: 'pushed', durationMs: 750, delayMs: 0 })
   })
 
   test('a few pixels of overlap (boxes covering a template outline) still count as touching', () => {
-    // Four up's rows overlap by 0.05 units so the boxes cover the outline between them.
-    const rt = resolveTransition(byId('slide-04'), 'in', 'A')
+    // Four Grid's rows overlap by 0.05 units so the boxes cover the outline between them.
+    const rt = resolveTransition({ ...byId('slide-04'), transitions: {} }, 'in', 'A')
     const wide = rt.tracks.find((t) => t.objectId === 'C')!
     expect(wide.follow).toMatchObject({ side: 'below' })
     expect(wide.follow!.gap).toBeCloseTo(-0.05, 6)
@@ -261,7 +297,7 @@ describe('plans', () => {
 describe('engine with the simulator', () => {
   test('full show: load, IN from presenter, OUT to slides', async () => {
     const s = sim()
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     s.setProgram(0, CAM)
     s.setPreview(0, WIDE)
 
@@ -295,7 +331,7 @@ describe('engine with the simulator', () => {
 
   test('a take made on the panel never animates', async () => {
     const s = sim()
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     await drive(s, engine.load('slide-10'))
     const before = structuredClone(s.getState().superSources[0].boxes)
     s.cut(0)
@@ -305,7 +341,7 @@ describe('engine with the simulator', () => {
 
   test('loading is refused while the only SuperSource is on air', async () => {
     const s = sim()
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     await drive(s, engine.load('slide-10'))
     s.cut(0)
     await expect(engine.load('slide-11')).rejects.toThrow(/No free SuperSource/)
@@ -313,7 +349,7 @@ describe('engine with the simulator', () => {
 
   test('SS AUTO with no match mixes instead of cutting', async () => {
     const s = new SimSwitcher({ mixFrames: 10 })
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     s.setProgram(0, WIDE) // nothing in Slide 10 shows the wide shot
     await drive(s, engine.load('slide-10'))
     expect(engine.nextTake()).toMatchObject({ action: 'in', match: { kind: 'none' } })
@@ -327,7 +363,7 @@ describe('engine with the simulator', () => {
 
   test('designTally follows the switcher', async () => {
     const s = sim()
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     expect(designTally(s.getState(), engine.slots, 'slide-10').tally).toBe('none')
     await drive(s, engine.load('slide-10'))
     expect(designTally(s.getState(), engine.slots, 'slide-10')).toEqual({ tally: 'pvw', ss: 0 })
@@ -337,12 +373,12 @@ describe('engine with the simulator', () => {
 
   test('restore carries loaded layouts over without sending anything', async () => {
     const s = sim()
-    const first = new Engine(s, settings, STARTER_DESIGNS)
+    const first = new Engine(s, settings, DESIGNS)
     await drive(s, first.load('slide-10'))
     s.cut(0)
     first.dispose()
     const before = structuredClone(s.getState())
-    const second = new Engine(s, settings, STARTER_DESIGNS)
+    const second = new Engine(s, settings, DESIGNS)
     second.restore(first.slots.map((x) => x.designId))
     expect(second.slots[0]).toMatchObject({ designId: 'slide-10', phase: 'on-air' })
     expect(s.getState()).toEqual(before)
@@ -354,7 +390,7 @@ describe('engine with the simulator', () => {
 
   test('a take that fails partway reports why and leaves no stuck phase', async () => {
     const s = sim()
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     await drive(s, engine.load('slide-10'))
     const run = s.run.bind(s)
     s.run = () => Promise.reject(new Error('Not connected to the switcher'))
@@ -366,13 +402,13 @@ describe('engine with the simulator', () => {
 
   test('load with no SuperSource says why', async () => {
     const s = new SimSwitcher({ superSourceCount: 0 })
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     await expect(engine.load('slide-10')).rejects.toThrow(/isn't connected, or it has no SuperSource/)
   })
 
   test('4 M/E with two SuperSources loads into the idle one', async () => {
     const s = new SimSwitcher({ superSourceCount: 2 })
-    const engine = new Engine(s, settings, STARTER_DESIGNS)
+    const engine = new Engine(s, settings, DESIGNS)
     await drive(s, engine.load('slide-10'))
     s.cut(0)
     const slot = await drive(s, engine.load('slide-11'))
@@ -395,7 +431,7 @@ describe('saved shows', () => {
       ['Presentation', { role: 'Presentation' }],
       ['My cam', { role: 'Static' }],
     ])
-    expect(settings.groups).toEqual(['Main + side column'])
+    expect(settings.groups).toEqual([GROUP_PRES])
   })
 
   test('running it twice changes nothing', () => {
@@ -403,3 +439,40 @@ describe('saved shows', () => {
     expect(migrateShow(once.designs, once.settings)).toEqual(once)
   })
 })
+
+describe('starter set 2', () => {
+  // A show saved by 0.1.x: the old Slides + presenter on the shortlist, starters in the old groups,
+  // and a layout of the user's own.
+  const mine = { ...SLIDE_10_PUSH, id: 'custom-1', name: 'My layout', group: 'Grid' }
+  const old = {
+    designs: [
+      { ...SLIDE_10, group: 'Main + side column' },
+      { ...SLIDE_10_PUSH, name: 'Slides + presenter (push)', group: 'Main + side column' },
+      { ...byId('slide-04'), name: 'Four up', group: 'Grid', transitions: {} },
+      mine,
+    ],
+    shortlist: ['slide-10', 'slide-10-push', 'custom-1'],
+    settings: { groups: ['Main + side column', 'Grid'] },
+    knownStarters: ['slide-10', 'slide-10-push', 'slide-11', 'slide-12', 'slide-02', 'slide-03', 'slide-04', 'two-presentations'],
+  }
+
+  test('an old save gets the new starters, groups and shortlist once', () => {
+    const show = upgradeShow(old)
+    const ids = show.designs.map((d) => d.id)
+    expect(ids).not.toContain('slide-10')
+    expect(show.designs.find((d) => d.id === 'slide-04')).toEqual(byId('slide-04'))
+    expect(show.designs.find((d) => d.id === 'custom-1')!.group).toBe(GROUP_GRID)
+    expect(ids).toEqual(expect.arrayContaining(['slide-02-push', 'slide-03-push']))
+    expect(show.shortlist).toEqual(['slide-10-push', 'custom-1'])
+    expect(show.settings.groups).toEqual([GROUP_PRES, GROUP_GRID])
+    expect(show.starterSet).toBe(2)
+  })
+
+  test("after that, the user's changes to a starter stay", () => {
+    const show = upgradeShow(old)
+    const edited = show.designs.map((d) => (d.id === 'slide-04' ? { ...d, name: 'My grid' } : d))
+    const again = upgradeShow({ ...show, designs: edited })
+    expect(again.designs.find((d) => d.id === 'slide-04')!.name).toBe('My grid')
+  })
+})
+

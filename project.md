@@ -276,6 +276,10 @@ Small, resizable window (about 1100×700, minimum 960×600). Icon rail on the le
   - The matched object's start (IN) or end (OUT) is fixed at full screen.
   - Every other object: offscreen left/right/top/bottom, scale from centre, crop wipe from an edge, already in place, or **pushed**: it rides against the full-screen box's edge with its final gap, on that box's timing, so the slides push the presenter off and pull it back in. Added 31 Oct 2026 with a *Slides + presenter (push)* copy of Slide 10 that uses it in all four transitions.
   - **Pushed is the default** (since 1 Nov 2026) for any box without its own motion. Boxes that overlap by up to 0.25 units (15 px, the bleed used to cover template outlines) still count as touching. A box that overlaps the full-screen box properly both ways has no edge to push against and stays in place. The original *Slides + presenter* keeps its custom motions (presenter revealed, slides sliding in).
+  - **Starter set 2** (1 Nov 2026). The app ships two groups, *Default Pres* and *Default Grid*, and the default IN and OUT are 850 and 750 ms (were 700 and 600):
+    - Default Pres: *Slides + Presenter* (pushed; replaces the original, which no longer ships), *Slides + Two Presenters* (pushed for the slides, boxes in place for the cameras), *Slides + Three Presenters* (pushed), *Two Presentations* (two 16:9 boxes at 49%, x ±7.9, pushed).
+    - Default Grid: *Two Presenters* and *Three Presenters* (other boxes in place) with a *Push* variant of each, and *Four Grid* (other boxes in place).
+    - Saved shows are updated once on load: starter layouts are replaced by these, the original Slides + presenter is swapped for the pushed one on the shortlist, and layouts in the old groups move to the new ones. Layouts the user made are kept.
   - Duration, delay (for staggering), easing (presets plus a curve editor).
 - **Timeline:** one track per object, so the stagger is visible.
 - **Test on preview** (§7).
@@ -393,7 +397,7 @@ Alternative considered: a .NET app using Blackmagic's official ATEM SDK. It's we
 Built (`apps/site`), served at `superdupersource.kennedys.nz` by CapRover, which rebuilds it from the GitHub repo on every push to `main`.
 
 - Styled like the app since the 1 Nov 2026 redesign: greys and black, 2px corners, and the top bar as tabs (Overview, Releases, GitHub).
-- The hero is a live canvas running the real Slides + presenter transitions (in from the camera, out to the slides and back), drawn as flat boxes the way the app draws them, so there's no video to keep in sync with the app.
+- The hero is a live canvas running the real Slides + Presenter transitions (pushed, opening on the finished layout, then out to the slides and back, out to the camera and back), drawn as flat boxes the way the app draws them, so there's no video to keep in sync with the app.
 - The in-browser demo at `/demo` was dropped on 1 Nov 2026; old links go to the home page.
 - One short page: a line on what it does, the animation, three steps, downloads and requirements. No logo; the name is written SuperDuperSource.kennedys.
 - The download rows read the latest GitHub release at load time and link the `.exe` and the Companion `.tgz`.

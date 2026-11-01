@@ -60,11 +60,11 @@ type Beat = { kind: 'hold'; ms: number; dir: Direction; matched: string; at: 'st
 
 // Starts on the finished layout, then: out to the slides, back in, out to the camera, back in.
 const BEATS: Beat[] = [
-  { kind: 'hold', ms: 1800, dir: 'in', matched: 'B', at: 'end', label: 'Program: Slides + presenter' },
+  { kind: 'hold', ms: 1800, dir: 'in', matched: 'B', at: 'end', label: 'Program: Slides + Presenter' },
   { kind: 'move', dir: 'out', matched: 'A', label: 'SS CUT: out to Presentation' },
   { kind: 'hold', ms: 1400, dir: 'out', matched: 'A', at: 'end', label: 'Program: Slides PC' },
   { kind: 'move', dir: 'in', matched: 'A', label: 'SS CUT: in from Presentation' },
-  { kind: 'hold', ms: 1800, dir: 'in', matched: 'A', at: 'end', label: 'Program: Slides + presenter' },
+  { kind: 'hold', ms: 1800, dir: 'in', matched: 'A', at: 'end', label: 'Program: Slides + Presenter' },
   { kind: 'move', dir: 'out', matched: 'B', label: 'SS CUT: out to Static' },
   { kind: 'hold', ms: 1400, dir: 'out', matched: 'B', at: 'end', label: 'Program: Presenter cam' },
   { kind: 'move', dir: 'in', matched: 'B', label: 'SS CUT: in from Static' },

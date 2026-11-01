@@ -2,9 +2,10 @@ import { EASINGS, Rect, lerpBox, nearestEdge, offscreen, reverseEasing, shrunk, 
 import { Design, Direction, Motion, Placement, TransitionKey, transitionKey } from './model'
 import { BoxState, FULLSCREEN, LIMITS } from './units'
 
+// The box going full screen. A little slower than a quick panel move, so the boxes read on air.
 export const DEFAULT_MATCHED_MOTION: Record<Direction, Motion> = {
-  in: { delayMs: 0, durationMs: 700, easing: 'easeInOutCubic' },
-  out: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
+  in: { delayMs: 0, durationMs: 850, easing: 'easeInOutCubic' },
+  out: { delayMs: 0, durationMs: 750, easing: 'easeInOutCubic' },
 }
 
 // Other objects are pushed: they ride against the matched object's edge, so the boxes move as one
