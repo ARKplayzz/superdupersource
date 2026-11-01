@@ -247,7 +247,7 @@ The same rules decide the OUT animation, using the preview source instead of pro
 
 - **Test on preview.** A button in the Design tab plays the animation on the engine while it's on preview only (blocked when on air). Watch it on the multiview.
 - **Auto-create boxes from cutouts.** Drop in a PNG, and the app reads the alpha channel and offers boxes snapped to each hole (what produced the table in §3).
-- **Roles instead of raw inputs.** Designs refer to roles like `Presenter`, `Slides` or `Wide`. Setup maps roles to inputs per venue, so a design built at one site works at another without editing.
+- **Roles instead of raw inputs.** Designs refer to sources like `Presentation`, `Static` or `Wide`. The Sources tab maps them to inputs per venue, so a design built at one site works at another without editing.
 - **Layout morph (Keynote "Magic Move").** On the same engine, going from slide 10 to slide 11 while on air: box A stays put, the side box splits into two. A big visual payoff, and the same interpolation code.
 - **A/B engines on the 4 M/E.** While SS1 is on air, the next design loads into SS2. Taking SS2 can morph between them if the backgrounds match.
 - **Show files.** Export and import a show (designs, groups, stills, role names) as one file for moving between venues and switchers.
@@ -444,6 +444,18 @@ Found while building: a take macro can't be made by *recording*, because recordi
 - `.github/workflows/release.yml`: on a `v*` tag it checks the tag matches the app and module versions, runs tests and type checks, builds the installer and the Companion `.tgz`, and publishes a GitHub release with the `.exe`, `.blockmap`, `latest.yml` and `.tgz`. `npm run bump <version>` keeps the versions in step.
 - Smoke-tested the packaged app: it starts, serves the Companion API, loads atem-connection's worker inside the archive in ATEM mode, and the window renders with the preload bridge working.
 - Signing: wired for Azure Trusted Signing through `azureSignOptions`, switched on only when the `AZURE_*` secrets exist. Still to do: the Azure account and identity verification, then add the secrets. Until then installs show a SmartScreen warning.
+
+**UI redesign (1 Nov 2026).** Built from the handoff in `UI Redesign Planning/`:
+
+- A top bar replaces the left rail. The look is greys and black with 2px corners and no icons. Red and green only mean no connection, connected and destructive.
+- *SuperSources* is now the Active SuperSources grid, in Companion button order, with the Library docked on the right. There's no SS CUT in the app; takes come from Companion.
+- *Design* has the Library on the left, the canvas with Grids and Templates overlays, the animation panel along the bottom and the box properties on the right. Edits stay as a draft until Save design, with 100 steps of undo.
+- *Sources* holds ten fixed sources: Presentation 1 to 4, Static, Wide, Camera 3 to 6. The old roles move across when a show loads (Slides is now Presentation, Presenter is Static, Guest is Camera 3), keeping their inputs.
+- *Setup* is one column. The simulator switch moved under Debug, and the Simulator page is gone.
+- Layouts can be locked box by box, pick their own background media player, and keep the library's group order (including empty groups) in settings.
+- Interpolation now blends the visible edges and the size, then solves position and crop, so an edge that starts and ends in the same place never moves.
+- New starter: *Two presentations* (Grid), two 16:9 boxes with the same 0.8 unit margin at the edges and between them.
+- Companion has no outside way to install a module, so Install saves the module from the latest release to Downloads and shows it; the last step is Modules, Import module package in Companion.
 
 **Phase 6: Extras.** Layout morph, 4 M/E A/B engines, 5 and 6 box layouts, show files.
 

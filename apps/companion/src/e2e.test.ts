@@ -68,7 +68,7 @@ describe('Companion module <-> app', () => {
     expect(await t.conn.request({ type: 'load', designId: 'slide-10' })).toEqual({ ok: true })
     await until(() => tally('slide-10', 'pvw'))
     expect(ready('animated')).toBe(true) // presenter cam is on program, and it's in the layout
-    expect(variableValues(state())).toMatchObject({ next_take: 'Slides + presenter: in from Presenter', next_animated: true, ss1_layout: 'Slides + presenter' })
+    expect(variableValues(state())).toMatchObject({ next_take: 'Slides + presenter: in from Static', next_animated: true, ss1_layout: 'Slides + presenter' })
 
     // SS CUT: animated IN. The result comes back once the take has finished.
     expect(await t.conn.request({ type: 'take', fallback: 'cut' })).toEqual({ ok: true })
@@ -76,10 +76,10 @@ describe('Companion module <-> app', () => {
     expect(state().slots[0].phase).toBe('on-air')
 
     // After the IN, the presenter cam is back on preview, so OUT would go to the presenter.
-    expect(state().next.headline).toBe('Slides + presenter: out to Presenter')
+    expect(state().next.headline).toBe('Slides + presenter: out to Static')
     // Put the slides on preview instead.
     t.switcher.setPreview(0, 2)
-    await until(() => state().next.headline === 'Slides + presenter: out to Slides')
+    await until(() => state().next.headline === 'Slides + presenter: out to Presentation')
     expect(await t.conn.request({ type: 'take', fallback: 'cut' })).toEqual({ ok: true })
     await until(() => tally('slide-10', 'pvw'))
     expect(t.switcher.getState().mixEffects[0].program).toBe(2)

@@ -1,165 +1,92 @@
-import { useMemo, useState } from 'react'
-import { Design } from '@sds/core/browser'
+import { useState } from 'react'
+import type { Design } from '@sds/core/browser'
 import type { AppSnapshot } from '../../../shared/api'
-import { drawLayout } from '../render'
-import { backgroundFile, describeNext, sourcesFor, tallyFor } from '../shared'
-import { Frame, Icon } from '../ui'
+import { libDrag } from '../Library'
+import { backgroundFile, finalBoxes, mpShort } from '../shared'
+import { LayoutView } from '../ui'
 
-const TALLY_LABEL = { pgm: 'Program', pvw: 'Preview', loaded: 'Loaded', none: '' }
+// The Active SuperSources: the show's shortlist, in Companion button order. Takes happen in Companion.
+export function SuperSources({ snap, libraryOpen, libDragging, onEdit }: { snap: AppSnapshot; libraryOpen: boolean; libDragging: boolean; onEdit: (id: string) => void }) {
+  const [over, setOver] = useState<number | null>(null)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const active = snap.shortlist.map((id) => snap.designs.find((d) => d.id === id)).filter((d): d is Design => !!d)
 
-function Thumb({ snap, design }: { snap: AppSnapshot; design: Design }) {
-  const sources = sourcesFor(snap, design)
-  return (
-    <Frame
-      deps={[design, sources.join(), snap.switcher.inputs]}
-      draw={(g, w, h) =>
-        drawLayout(
-          g,
-          snap.switcher,
-          design.objects.map((o, i) => ({ source: sources[i], state: o.final })),
-          w,
-          h,
-          backgroundFile(design),
-        )
-      }
-    />
-  )
-}
-
-export function SuperSources({ snap, onEdit, onMessage }: { snap: AppSnapshot; onEdit: (id: string) => void; onMessage: (m: string) => void }) {
-  const [dragOver, setDragOver] = useState(false)
-  const [closed, setClosed] = useState<Record<string, boolean>>({})
-  const [busy, setBusy] = useState(false)
-
-  const shortlist = snap.shortlist.map((id) => snap.designs.find((d) => d.id === id)).filter((d): d is Design => !!d)
-  const groups = useMemo(() => {
-    const m = new Map<string, Design[]>()
-    for (const d of snap.designs) m.set(d.group, [...(m.get(d.group) ?? []), d])
-    return [...m.entries()]
-  }, [snap.designs])
-
-  const add = (id: string) => {
-    if (!snap.shortlist.includes(id)) void window.sds.setShortlist([...snap.shortlist, id])
-  }
-  const remove = (id: string) => void window.sds.setShortlist(snap.shortlist.filter((s) => s !== id))
-
-  const load = async (design: Design) => {
-    const res = await window.sds.load(design.id)
-    if (!res.ok) onMessage(res.error)
+  const moveTo = (id: string, index: number) => {
+    const list = snap.shortlist.filter((x) => x !== id)
+    const from = snap.shortlist.indexOf(id)
+    const at = from > -1 && from < index ? index - 1 : index
+    list.splice(Math.max(0, Math.min(at, list.length)), 0, id)
+    void window.sds.setShortlist(list)
   }
 
-  const take = async () => {
-    setBusy(true)
-    try {
-      const res = await window.sds.take()
-      if (res.action === 'none') onMessage(res.reason)
-    } finally {
-      setBusy(false)
-    }
+  const dragId = () => dragging ?? (libDrag.kind === 'design' ? libDrag.id : null)
+  const drop = (index: number) => {
+    const id = dragId()
+    if (id) moveTo(id, index)
+    setOver(null)
+    setDragging(null)
+    libDrag.kind = null
+  }
+  const overAt = (e: React.DragEvent, index: number) => {
+    if (!dragId()) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (over !== index) setOver(index)
   }
 
-  const next = describeNext(snap)
-  const animating = snap.slots.some((s) => s.phase.startsWith('animating'))
+  const showEnd = active.length === 0 || libDragging
 
   return (
-    <div className="layouts">
-      <div className="layouts-main">
-        <div
-          className={`shortlist ${dragOver ? 'drag-over' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragOver(true)
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            setDragOver(false)
-            const id = e.dataTransfer.getData('text/design')
-            if (id) add(id)
-          }}
-        >
-          <h2 className="section-title">Today's shortlist</h2>
-          {shortlist.length === 0 ? (
-            <div className="empty">Drag layouts here from the library, or press + next to one.</div>
-          ) : (
-            <div className="card-grid">
-              {shortlist.map((d) => {
-                const { tally, ss } = tallyFor(snap, d.id)
-                return (
-                  <article key={d.id} className={`card tally-${tally}`} onClick={() => void load(d)} title="Load into a free SuperSource and put it on preview">
-                    <Thumb snap={snap} design={d} />
-                    <div className="card-meta">
-                      <div>
-                        <div className="card-name">{d.name}</div>
-                        <div className="card-sub">
-                          {d.objects.map((o) => o.name).join(' · ')}
-                        </div>
-                      </div>
-                      {tally !== 'none' && (
-                        <span className={`chip ${tally === 'pgm' ? 'pgm' : tally === 'pvw' ? 'pvw' : ''}`}>
-                          <span className="dot" />
-                          {TALLY_LABEL[tally]}
-                          {snap.slots.length > 1 && ss !== undefined ? ` · SS${ss + 1}` : ''}
-                        </span>
-                      )}
-                    </div>
-                    <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn ghost small" onClick={() => onEdit(d.id)}>
-                        Edit
-                      </button>
-                      <button className="btn ghost small" onClick={() => remove(d.id)} title="Remove from the shortlist">
-                        {Icon.close()}
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <footer className="take-bar">
-          <div className="take-text">
-            <div className="take-headline">{animating ? 'Animating…' : next.headline}</div>
-            <div className="take-detail muted">{next.detail}</div>
-          </div>
-          <button className="btn primary take-btn" disabled={busy || animating || snap.next.action === 'none'} onClick={() => void take()}>
-            SS CUT
-          </button>
-        </footer>
+    <main className="active-page" style={{ paddingRight: libraryOpen ? 360 : 20 }}>
+      <div className="active-head">
+        <h2>Active SuperSources</h2>
+        <span className="muted num">{active.length}</span>
       </div>
-
-      <aside className="library">
-        <h2 className="section-title">Library</h2>
-        {groups.map(([group, designs]) => (
-          <div key={group} className="lib-group">
-            <button className="lib-group-head" onClick={() => setClosed({ ...closed, [group]: !closed[group] })}>
-              {Icon.chevron(!closed[group])}
-              <span>{group}</span>
-              <span className="muted num">{designs.length}</span>
-            </button>
-            {!closed[group] &&
-              designs.map((d) => {
-                const listed = snap.shortlist.includes(d.id)
-                return (
-                  <div key={d.id} className="lib-row" draggable onDragStart={(e) => e.dataTransfer.setData('text/design', d.id)}>
-                    <div className="lib-thumb">
-                      <Thumb snap={snap} design={d} />
-                    </div>
-                    <div className="lib-text">
-                      <div>{d.name}</div>
-                      <div className="muted num">
-                        {d.objects.length} {d.objects.length === 1 ? 'box' : 'boxes'}
-                      </div>
-                    </div>
-                    <button className="btn ghost small" disabled={listed} onClick={() => add(d.id)} title={listed ? 'Already on the shortlist' : 'Add to the shortlist'}>
-                      {listed ? 'Listed' : Icon.plus()}
-                    </button>
-                  </div>
-                )
-              })}
-          </div>
+      <div className="active-grid" onDragOver={(e) => overAt(e, active.length)} onDrop={(e) => (e.preventDefault(), drop(active.length))} onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}>
+        {active.map((d, i) => (
+          <article
+            key={d.id}
+            className={`card ${dragging === d.id ? 'dragging' : ''} ${over === i && dragging !== d.id ? 'drop-before' : ''}`}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/sds-card', d.id)
+              setDragging(d.id)
+            }}
+            onDragOver={(e) => overAt(e, i)}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              drop(i)
+            }}
+            onDragEnd={() => {
+              setDragging(null)
+              setOver(null)
+            }}
+          >
+            <LayoutView boxes={finalBoxes(snap, d)} background={backgroundFile(d)} labels className="card-thumb" />
+            <div className="card-meta">
+              <span className="muted num card-pos">{i + 1}</span>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="card-name ellipsis" title={d.name}>
+                  {d.name}
+                </div>
+                <div className="card-sub ellipsis" title={d.objects.map((o) => o.name).join(', ')}>
+                  {d.objects.map((o) => o.name).join(', ')}
+                </div>
+              </div>
+              <span className="muted card-mp" title="Background media player">
+                {mpShort(snap, d)}
+              </span>
+            </div>
+            <div className="card-actions">
+              <button onClick={() => onEdit(d.id)}>Edit</button>
+              <button onClick={() => void window.sds.setShortlist(snap.shortlist.filter((x) => x !== d.id))}>Remove</button>
+            </div>
+          </article>
         ))}
-      </aside>
-    </div>
+        {showEnd && <div className={`end-drop ${over === active.length ? 'over' : ''}`}>{active.length === 0 && !libDragging ? 'Drag layouts here from the Library.' : 'Drop to add'}</div>}
+      </div>
+    </main>
   )
 }

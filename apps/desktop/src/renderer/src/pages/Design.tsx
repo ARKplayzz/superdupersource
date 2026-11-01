@@ -1,34 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   BoxState,
   Design as DesignT,
   DesignObject,
-  EASINGS,
   EasingName,
   LIMITS,
   Motion,
   Placement,
   TransitionKey,
   box,
-  buildFrames,
   durationMs,
-  inputFor,
   motionFor,
   parseTransitionKey,
   resolveTransition,
   statesAt,
-  transitionKeys,
-  visibleRect,
 } from '@sds/core/browser'
 import type { AppSnapshot } from '../../../shared/api'
 import { cutouts, fitToCutout } from '../cutouts'
-import { drawLayout, image } from '../render'
-import { backgroundFile, objectName } from '../shared'
-import { Frame, Icon } from '../ui'
+import { canUndo, draftOf, edit, forget, isDirty, save, undo, useDrafts } from '../drafts'
+import { onImagesLoaded } from '../render'
+import { backgroundFile, finalBoxes, groupNames, mediaPlayers, mpShort, objectName, roleOf, sourceText } from '../shared'
+import { LayoutView, ViewBox, boxRect, useOutside } from '../ui'
 
 const PLACEMENTS: { value: Placement; label: string }[] = [
-  { value: 'in-place', label: 'In place (revealed / covered)' },
-  { value: 'pushed', label: 'Pushed by the full-screen box' },
+  { value: 'in-place', label: 'In place' },
+  { value: 'pushed', label: 'Pushed by full-screen box' },
   { value: 'offscreen-nearest', label: 'Off nearest edge' },
   { value: 'offscreen-left', label: 'Off left' },
   { value: 'offscreen-right', label: 'Off right' },
@@ -37,70 +33,139 @@ const PLACEMENTS: { value: Placement; label: string }[] = [
   { value: 'shrunk', label: 'Shrink to centre' },
 ]
 
-const ORIGIN_LABEL = { custom: 'Custom', reversed: 'Reverse of IN', default: 'Default' }
+const EASINGS: { value: EasingName; label: string }[] = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'easeInCubic', label: 'Ease in' },
+  { value: 'easeOutCubic', label: 'Ease out' },
+  { value: 'easeInOutCubic', label: 'Ease in-out' },
+]
+// Older layouts can use the stronger curves. They're listed only when a box already uses one.
+const STRONG: Partial<Record<EasingName, string>> = { easeInQuart: 'Strong ease in', easeOutQuart: 'Strong ease out', easeInOutQuart: 'Strong ease in-out' }
 
-type Drag =
-  | { kind: 'move'; id: string; start: BoxState; px: number; py: number }
-  | { kind: 'resize'; id: string; start: BoxState; d0: number }
-  | { kind: 'crop'; id: string; start: BoxState; edge: 'l' | 'r' | 't' | 'b'; px: number; py: number }
+const GRIDS = [
+  { value: 'thirds', label: 'Thirds' },
+  { value: 'quarters', label: '4 × 4' },
+  { value: 'units', label: 'Units (2 × 2)' },
+  { value: 'safe', label: 'Safe area 90/80%' },
+  { value: 'cross', label: 'Crosshair' },
+]
+const TEMPLATES = ['02', '03', '04', '05', '06', '10', '11', '12'].map((n) => ({ value: `Slide_${n}.PNG`, label: `Slide ${n}` }))
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
-const r2 = (v: number) => Math.round(v * 100) / 100
-
-function transitionLabel(design: DesignT, key: TransitionKey): string {
-  const { direction, objectId } = parseTransitionKey(key)
-  const name = objectName(design, objectId)
-  return direction === 'in' ? `IN from ${name}` : `OUT to ${name}`
+function gridLines(grid: string): CSSProperties[] {
+  const at = (n: number) => Array.from({ length: n - 1 }, (_, i) => ((i + 1) / n) * 100)
+  const v = (p: number): CSSProperties => ({ left: `${p}%`, top: 0, width: 1, height: '100%' })
+  const h = (p: number): CSSProperties => ({ left: 0, top: `${p}%`, width: '100%', height: 1 })
+  if (grid === 'thirds') return [...at(3).map(v), ...at(3).map(h)]
+  if (grid === 'quarters') return [...at(4).map(v), ...at(4).map(h)]
+  if (grid === 'units') return [...at(16).map(v), ...at(9).map(h)]
+  if (grid === 'safe') return [90, 80].map((p) => ({ left: `${(100 - p) / 2}%`, top: `${(100 - p) / 2}%`, width: `${p}%`, height: `${p}%`, border: '1px solid var(--grid)', background: 'none' }))
+  if (grid === 'cross') return [{ left: '50%', top: '44%', width: 1, height: '12%' }, { left: '46.6%', top: '50%', width: '6.8%', height: 1 }]
+  return []
 }
 
-export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnapshot; designId: string; onSelect: (id: string) => void; onMessage: (m: string) => void }) {
+type Drag =
+  | { kind: 'move'; id: string; start: BoxState; ux: number; uy: number }
+  | { kind: 'resize'; id: string; start: BoxState; d0: number }
+  | { kind: 'crop'; id: string; start: BoxState; edge: 'l' | 'r' | 't' | 'b'; ux: number; uy: number }
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+const r1 = (v: number) => Math.round(v * 10) / 10
+
+function transitionKeys(d: DesignT): TransitionKey[] {
+  return [...d.objects.map((o) => `in:${o.id}` as const), ...d.objects.map((o) => `out:${o.id}` as const)]
+}
+
+function transitionLabel(d: DesignT, key: TransitionKey): string {
+  const { direction, objectId } = parseTransitionKey(key)
+  return direction === 'in' ? `IN from ${objectName(d, objectId)}` : `OUT to ${objectName(d, objectId)}`
+}
+
+const firstKey = (d: DesignT): TransitionKey | null => (d.objects.length ? `in:${d.objects[d.objects.length - 1].id}` : null)
+
+export function Design({
+  snap,
+  designId,
+  library,
+  onShowLibrary,
+  onSelect,
+  onMessage,
+}: {
+  snap: AppSnapshot
+  designId: string
+  library: ReactNode | null
+  onShowLibrary: () => void
+  onSelect: (id: string) => void
+  onMessage: (m: string) => void
+}) {
+  useDrafts()
   const saved = snap.designs.find((d) => d.id === designId) ?? snap.designs[0]
-  const [design, setDesign] = useState<DesignT | undefined>(saved)
-  const [mode, setMode] = useState<'layout' | 'motion'>('layout')
+  const design = saved ? draftOf(saved) : undefined
+
   const [selected, setSelected] = useState<string | null>(saved?.objects[0]?.id ?? null)
-  const [tKey, setTKey] = useState<TransitionKey | null>(null)
+  const [tKey, setTKey] = useState<TransitionKey | null>(saved ? firstKey(saved) : null)
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [showGuide, setShowGuide] = useState(true)
+  const [previewing, setPreviewing] = useState(false)
+  const [grid, setGrid] = useState('')
+  const [hoverBox, setHoverBox] = useState<string | null>(null)
+  const [cropOpen, setCropOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [boxDrag, setBoxDrag] = useState<number | null>(null)
+  const [boxOver, setBoxOver] = useState<number | null>(null)
+  const [canvasW, setCanvasW] = useState(0)
+  const [, setImgTick] = useState(0)
   const drag = useRef<Drag | null>(null)
-  const canvas = useRef<HTMLCanvasElement | null>(null)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const canvas = useRef<HTMLDivElement | null>(null)
+  const stage = useRef<HTMLDivElement | null>(null)
 
-  // Switching designs resets local edits.
+  useOutside('settings', settingsOpen, useCallback(() => setSettingsOpen(false), []))
+  useOutside('more', moreOpen, useCallback(() => setMoreOpen(false), []))
+  useEffect(() => onImagesLoaded(() => setImgTick((t) => t + 1)), [])
+
+  // A different layout starts fresh: first box selected, the last box's IN shown, nothing playing.
   useEffect(() => {
-    setDesign(saved)
     setSelected(saved?.objects[0]?.id ?? null)
-    setTKey(saved ? transitionKeys(saved)[0] : null)
+    setTKey(saved ? firstKey(saved) : null)
     setTime(0)
+    setPlaying(false)
+    setPreviewing(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved?.id])
 
-  const update = (next: DesignT) => {
-    setDesign(next)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => void window.sds.saveDesign(next), 250)
-  }
+  // The canvas is as big as fits the stage at 16:9.
+  useLayoutEffect(() => {
+    const el = stage.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => {
+      const r = e.contentRect
+      setCanvasW(Math.floor(Math.max(120, Math.min(r.width, (r.height * 16) / 9))))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
+  const keys = design ? transitionKeys(design) : []
+  const key = tKey && keys.includes(tKey) ? tKey : design ? firstKey(design) : null
   const resolved = useMemo(() => {
-    if (!design || !tKey || !design.objects.some((o) => o.id === parseTransitionKey(tKey).objectId)) return null
-    const { direction, objectId } = parseTransitionKey(tKey)
+    if (!design || !key) return null
+    const { direction, objectId } = parseTransitionKey(key)
     return resolveTransition(design, direction, objectId)
-  }, [design, tKey])
-  const total = resolved ? durationMs(resolved) : 0
+  }, [design, key])
+  const total = Math.max(1, resolved ? durationMs(resolved) : 0)
 
-  // Playback: advance time on animation frames.
   useEffect(() => {
     if (!playing) return
     let raf = 0
     const t0 = performance.now() - (time >= total ? 0 : time)
     const step = () => {
       const t = performance.now() - t0
-      if (t >= total + 400) {
+      if (t >= total) {
         setTime(total)
         setPlaying(false)
         return
       }
-      setTime(Math.min(total, t))
+      setTime(t)
       raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
@@ -108,77 +173,25 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing])
 
-  if (!design) return <div className="empty">No designs yet.</div>
-
-  const roles = snap.settings.roles
-  const sourceOf = (o: DesignObject) => inputFor(o.source, roles) ?? 0
-  const holes = cutouts(design.guide)
-  const sel = design.objects.find((o) => o.id === selected)
-
-  // What the canvas shows: final form in layout mode, the transition at `time` in motion mode.
-  const layoutBoxes = (): { id: string; source: number; state: BoxState }[] => {
-    if (mode === 'motion' && resolved) {
-      const states = statesAt(resolved, time)
-      return resolved.tracks.map((t, i) => ({ id: t.objectId, source: sourceOf(design.objects.find((o) => o.id === t.objectId)!), state: states[i] }))
+  // Ctrl+Z undoes layout edits, except while typing in a text field.
+  useEffect(() => {
+    if (!design) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
+      const t = e.target as HTMLInputElement
+      if (t.tagName === 'INPUT' && t.type === 'text') return
+      e.preventDefault()
+      undo(design.id)
     }
-    return design.objects.map((o) => ({ id: o.id, source: sourceOf(o), state: o.final }))
-  }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [design])
 
-  const draw = (g: CanvasRenderingContext2D, w: number, h: number) => {
-    const boxes = layoutBoxes()
-    drawLayout(g, snap.switcher, boxes, w, h, backgroundFile(design))
-    const k = w / 32
-    if (mode === 'layout') {
-      const guide = image(design.guide ?? '')
-      if (showGuide && guide) {
-        g.globalAlpha = 0.45
-        g.drawImage(guide, 0, 0, w, h)
-        g.globalAlpha = 1
-      }
-      for (const b of boxes) {
-        const r = visibleRect(b.state)
-        const x = (r.l + 16) * k
-        const y = (9 - r.t) * k
-        const bw = (r.r - r.l) * k
-        const bh = (r.t - r.b) * k
-        const isSel = b.id === selected
-        g.strokeStyle = isSel ? '#e8642a' : 'rgba(255,255,255,0.55)'
-        g.lineWidth = isSel ? 2 * devicePixelRatio : 1 * devicePixelRatio
-        g.strokeRect(x, y, bw, bh)
-        g.font = `600 ${12 * devicePixelRatio}px "Segoe UI", system-ui`
-        const name = objectName(design, b.id)
-        const tw = g.measureText(name).width
-        g.fillStyle = isSel ? '#e8642a' : 'rgba(0,0,0,0.6)'
-        g.fillRect(x, y, tw + 12 * devicePixelRatio, 20 * devicePixelRatio)
-        g.fillStyle = isSel ? '#160a04' : '#fff'
-        g.fillText(name, x + 6 * devicePixelRatio, y + 14 * devicePixelRatio)
-        if (isSel) {
-          const hs = 7 * devicePixelRatio
-          g.fillStyle = '#e8642a'
-          for (const [hx, hy] of [
-            [x, y],
-            [x + bw, y],
-            [x, y + bh],
-            [x + bw, y + bh],
-          ])
-            g.fillRect(hx - hs / 2, hy - hs / 2, hs, hs)
-          g.fillStyle = '#fff'
-          for (const [hx, hy] of [
-            [x, y + bh / 2],
-            [x + bw, y + bh / 2],
-            [x + bw / 2, y],
-            [x + bw / 2, y + bh],
-          ])
-            g.fillRect(hx - hs / 2, hy - hs / 2, hs, hs)
-        }
-      }
-    }
-  }
-
-  const setObject = (id: string, patch: Partial<DesignObject>) =>
-    update({ ...design, objects: design.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) })
+  const update = (next: DesignT) => design && edit(design, next)
+  const setObject = (id: string, patch: Partial<DesignObject>) => design && update({ ...design, objects: design.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) })
   const setFinal = (id: string, patch: Partial<BoxState>) => {
-    const o = design.objects.find((x) => x.id === id)!
+    const o = design?.objects.find((x) => x.id === id)
+    if (!o) return
     const f = { ...o.final, ...patch }
     setObject(id, {
       final: {
@@ -193,420 +206,546 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
     })
   }
 
-  // ----- canvas interaction (layout mode) -----
-  const toUnits = (e: React.PointerEvent) => {
+  // ----- canvas dragging -----
+  const toUnits = (e: { clientX: number; clientY: number }) => {
     const r = canvas.current!.getBoundingClientRect()
-    const k = r.width / 32
-    return { ux: (e.clientX - r.left) / k - 16, uy: 9 - (e.clientY - r.top) / k, k }
+    return { ux: ((e.clientX - r.left) / r.width) * 32 - 16, uy: 9 - ((e.clientY - r.top) / r.height) * 18 }
   }
 
-  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (mode !== 'layout') return
-    const { ux, uy, k } = toUnits(e)
-    const near = 8 / k // 8 css px in units
-    if (sel) {
-      const r = visibleRect(sel.final)
-      const corners = [
-        [r.l, r.t],
-        [r.r, r.t],
-        [r.l, r.b],
-        [r.r, r.b],
-      ]
-      if (corners.some(([cx, cy]) => Math.abs(ux - cx) < near && Math.abs(uy - cy) < near)) {
-        drag.current = { kind: 'resize', id: sel.id, start: sel.final, d0: Math.hypot(ux - sel.final.x, uy - sel.final.y) }
-      } else {
-        const midY = (r.t + r.b) / 2
-        const midX = (r.l + r.r) / 2
-        const edges: ['l' | 'r' | 't' | 'b', number, number][] = [
-          ['l', r.l, midY],
-          ['r', r.r, midY],
-          ['t', midX, r.t],
-          ['b', midX, r.b],
-        ]
-        const edge = edges.find(([, ex, ey]) => Math.abs(ux - ex) < near && Math.abs(uy - ey) < near)
-        if (edge) drag.current = { kind: 'crop', id: sel.id, start: sel.final, edge: edge[0], px: ux, py: uy }
-      }
+  // Latest setFinal for the window listeners below.
+  const setFinalRef = useRef(setFinal)
+  setFinalRef.current = setFinal
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || !canvas.current) return
+      const { ux, uy } = toUnits(e)
+      const sn = (v: number) => (e.altKey ? v : Math.round(v * 10) / 10)
+      const st = d.start
+      if (d.kind === 'move') return setFinalRef.current(d.id, { x: sn(st.x + ux - d.ux), y: sn(st.y + uy - d.uy) })
+      if (d.kind === 'resize') return setFinalRef.current(d.id, { size: Math.round(st.size * (Math.hypot(ux - st.x, uy - st.y) / Math.max(0.01, d.d0)) * 100) / 100 })
+      const dx = (ux - d.ux) / st.size
+      const dy = (uy - d.uy) / st.size
+      const p: Partial<BoxState> =
+        d.edge === 'l' ? { cropL: sn(st.cropL + dx) } : d.edge === 'r' ? { cropR: sn(st.cropR - dx) } : d.edge === 't' ? { cropT: sn(st.cropT - dy) } : { cropB: sn(st.cropB + dy) }
+      setFinalRef.current(d.id, p)
     }
-    if (!drag.current) {
-      // Box 1 draws on top, so hit-test in design order.
-      const hit = design.objects.find((o) => {
-        const r = visibleRect(o.final)
-        return ux >= r.l && ux <= r.r && uy <= r.t && uy >= r.b
-      })
-      setSelected(hit?.id ?? null)
-      if (hit) drag.current = { kind: 'move', id: hit.id, start: hit.final, px: ux, py: uy }
+    const onUp = () => (drag.current = null)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
     }
-    if (drag.current) (e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [])
+
+  if (!design || !saved) return <div className="empty">No layouts yet.</div>
+
+  const sel = design.objects.find((o) => o.id === selected)
+  const holes = cutouts(design.guide)
+  const dirty = isDirty(design.id)
+  const showPreview = previewing && !!resolved
+
+  const viewBoxes: ViewBox[] =
+    showPreview && resolved
+      ? (() => {
+          const states = statesAt(resolved, time)
+          return resolved.tracks.map((t, i) => {
+            const o = design.objects.find((x) => x.id === t.objectId)!
+            return { object: o, state: states[i], sub: sourceText(snap, o) }
+          })
+        })()
+      : finalBoxes(snap, design)
+
+  const closePops = () => {
+    setSettingsOpen(false)
+    setMoreOpen(false)
   }
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = drag.current
-    if (!d) return
-    const { ux, uy } = toUnits(e)
-    const snapTo = (v: number) => (e.altKey ? v : Math.round(v / 0.05) * 0.05)
-    if (d.kind === 'move') {
-      setFinal(d.id, { x: r2(snapTo(d.start.x + ux - d.px)), y: r2(snapTo(d.start.y + uy - d.py)) })
-    } else if (d.kind === 'resize') {
-      const ratio = Math.hypot(ux - d.start.x, uy - d.start.y) / Math.max(0.01, d.d0)
-      setFinal(d.id, { size: Math.round(d.start.size * ratio * 1000) / 1000 })
-    } else {
-      const s = d.start.size
-      const dx = (ux - d.px) / s
-      const dy = (uy - d.py) / s
-      const patch: Partial<BoxState> =
-        d.edge === 'l' ? { cropL: d.start.cropL + dx } : d.edge === 'r' ? { cropR: d.start.cropR - dx } : d.edge === 't' ? { cropT: d.start.cropT - dy } : { cropB: d.start.cropB + dy }
-      for (const k of Object.keys(patch) as (keyof BoxState)[]) patch[k] = Math.round(snapTo(patch[k]!) * 1000) / 1000
-      setFinal(d.id, patch)
-    }
+  const startHandle = (kind: 'resize' | 'crop', edge?: 'l' | 'r' | 't' | 'b') => (e: React.PointerEvent) => {
+    if (!sel) return
+    e.stopPropagation()
+    const u = toUnits(e)
+    drag.current =
+      kind === 'resize' ? { kind, id: sel.id, start: sel.final, d0: Math.hypot(u.ux - sel.final.x, u.uy - sel.final.y) } : { kind, id: sel.id, start: sel.final, edge: edge!, ...u }
   }
 
-  const onPointerUp = () => (drag.current = null)
-
-  // ----- objects -----
-  const addObject = () => {
+  // ----- boxes -----
+  const roles = Object.keys(snap.settings.roles)
+  const addBox = () => {
     const used = new Set(design.objects.map((o) => o.id))
-    const id = 'ABCD'.split('').find((c) => !used.has(c))
+    const id = 'ABCDEFGH'.split('').find((c) => !used.has(c))
     if (!id) return
-    const role = Object.keys(roles).find((r) => !design.objects.some((o) => 'role' in o.source && o.source.role === r)) ?? Object.keys(roles)[0]
-    update({
-      ...design,
-      objects: [...design.objects, { id, name: role ?? `Box ${id}`, source: { role }, final: box({ size: 0.4 }), matchPriority: design.objects.length + 1 }],
-    })
+    const role = roles.find((r) => !design.objects.some((o) => roleOf(o) === r)) ?? roles[0]
+    update({ ...design, objects: [...design.objects, { id, name: role, source: { role }, final: box({ size: 0.4 }), matchPriority: design.objects.length + 1 }] })
     setSelected(id)
+    setPreviewing(false)
   }
-
-  const removeObject = (id: string) => {
+  const removeBox = (id: string) => {
     const transitions = Object.fromEntries(
       Object.entries(design.transitions)
         .filter(([k]) => parseTransitionKey(k as TransitionKey).objectId !== id)
         .map(([k, v]) => [k, Object.fromEntries(Object.entries(v ?? {}).filter(([oid]) => oid !== id))]),
     )
     update({ ...design, objects: design.objects.filter((o) => o.id !== id), transitions })
-    setSelected(design.objects.find((o) => o.id !== id)?.id ?? null)
+    setSelected(null)
+  }
+  // Row order is layer order: the first row draws on top.
+  const moveBox = (from: number, to: number) => {
+    if (from === to) return
+    const objects = [...design.objects]
+    const [o] = objects.splice(from, 1)
+    objects.splice(to > from ? to - 1 : to, 0, o)
+    update({ ...design, objects })
   }
 
   // ----- motion -----
   const setMotion = (objectId: string, patch: Partial<Motion>) => {
-    if (!tKey) return
-    const { direction, objectId: matched } = parseTransitionKey(tKey)
-    // First edit to a transition copies every object's current motion, so the rest stay as they look.
-    const current = design.transitions[tKey] ?? Object.fromEntries(design.objects.map((o) => [o.id, motionFor(design, direction, matched, o.id).motion]))
-    update({ ...design, transitions: { ...design.transitions, [tKey]: { ...current, [objectId]: { ...current[objectId], ...patch } } } })
+    if (!key) return
+    const { direction, objectId: matched } = parseTransitionKey(key)
+    // The first edit to a transition copies every box's current motion, so the others look the same.
+    const current = design.transitions[key] ?? Object.fromEntries(design.objects.map((o) => [o.id, motionFor(design, direction, matched, o.id).motion]))
+    update({ ...design, transitions: { ...design.transitions, [key]: { ...current, [objectId]: { ...current[objectId], ...patch } } } })
   }
 
-  const resetTransition = () => {
-    if (!tKey) return
-    const { [tKey]: _gone, ...rest } = design.transitions
-    update({ ...design, transitions: rest })
-  }
-
-  // ----- design management -----
+  // ----- layout -----
   const duplicate = () => {
     const id = `${design.id}-copy-${Date.now().toString(36)}`
-    const copy: DesignT = { ...structuredClone(design), id, name: `${design.name} copy` }
-    void window.sds.saveDesign(copy).then(() => onSelect(id))
+    void window.sds.saveDesign({ ...structuredClone(design), id, name: `${design.name} copy` }).then(() => onSelect(id))
   }
-
   const remove = () => {
     if (snap.slots.some((s) => s.designId === design.id)) return onMessage('This layout is loaded in a SuperSource. Load a different one first.')
     if (!confirm(`Delete "${design.name}"? This can't be undone.`)) return
     const next = snap.designs.find((d) => d.id !== design.id)
+    forget(design.id)
     void window.sds.deleteDesign(design.id).then(() => next && onSelect(next.id))
   }
 
-  const groups = [...new Set(snap.designs.map((d) => d.group))]
-  const fps = snap.info.fps
-  const frameCount = resolved ? buildFrames(resolved, fps).length - 1 : 0
+  const overlay = grid ? `grid:${grid}` : design.guide ? `tpl:${design.guide}` : ''
+  const setOverlay = (v: string) => {
+    const [kind, value] = v.split(':')
+    if (kind === 'grid') return setGrid(value)
+    setGrid('')
+    const guide = kind === 'tpl' ? value : undefined
+    if (guide !== design.guide) update({ ...design, guide })
+  }
+
+  const playhead = `${(Math.min(time, total) / total) * 100}%`
+  const dir = key ? parseTransitionKey(key).direction : 'in'
+  const players = mediaPlayers(snap)
+  const mp = design.mp ?? snap.settings.backgroundInput
+
+  const fields = (list: [keyof BoxState, string][]) =>
+    sel &&
+    list.map(([k, label]) => (
+      <label key={k} className="field">
+        <span>{label}</span>
+        <input
+          type="number"
+          step={k === 'size' ? 1 : 0.1}
+          value={k === 'size' ? r1(sel.final.size * 100) : r1(sel.final[k])}
+          onChange={(e) => {
+            const v = Number(e.target.value)
+            setFinal(sel.id, { [k]: k === 'size' ? v / 100 : v })
+            setPreviewing(false)
+          }}
+        />
+      </label>
+    ))
 
   return (
-    <div className="design">
-      <div className="design-stage">
-        <div className="stage-toolbar">
-          <div className="seg">
-            <button className={mode === 'layout' ? 'on' : ''} onClick={() => setMode('layout')}>
-              Layout
-            </button>
-            <button className={mode === 'motion' ? 'on' : ''} onClick={() => setMode('motion')}>
-              Motion
-            </button>
-          </div>
-          {mode === 'layout' ? (
-            <>
-              <label className="toggle">
-                <input type="checkbox" checked={showGuide} onChange={(e) => setShowGuide(e.target.checked)} disabled={!design.guide} />
-                Guide overlay {design.guide ? <span className="muted">({design.guide.replace(/\.png$/i, '')})</span> : null}
-              </label>
-              <span className="muted hint">Drag to move · corners resize · edge handles crop · Alt for no snapping</span>
-            </>
-          ) : (
-            <span className="muted hint">{resolved ? transitionLabel(design, resolved.key) : ''}</span>
-          )}
-        </div>
-
-        <div className="stage-canvas">
-          <div className="canvas-wrap" onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-            <Frame canvasRef={canvas} deps={[design, mode, time, selected, showGuide, resolved, snap.settings.roles, holes.length]} draw={draw} onPointerDown={onPointerDown} />
-          </div>
-        </div>
-
-        {mode === 'motion' && resolved && (
-          <div className="timeline panel">
-            <div className="timeline-controls">
-              <button
-                className="btn small"
-                onClick={() => {
-                  if (time >= total) setTime(0)
-                  setPlaying(!playing)
-                }}
-              >
-                {Icon.play()} {playing ? 'Pause' : 'Play'}
+    <main className="design">
+      <div className="design-left">
+        <div className="design-top">
+          {library}
+          <div className="design-main">
+            <div className="toolbar">
+              {!library && (
+                <button className="btn" onClick={onShowLibrary} style={{ marginRight: 4 }}>
+                  Library
+                </button>
+              )}
+              <button data-pop="settings" className={`title-btn ${settingsOpen ? 'on' : ''}`} onClick={() => (setSettingsOpen(!settingsOpen), setMoreOpen(false))} title="Layout settings">
+                <span className="title-name ellipsis">{design.name}</span>
+                <span className="muted title-meta">{[design.group, mpShort(snap, design)].filter((x) => x).join(', ')}</span>
               </button>
-              <input type="range" min={0} max={total} step={1} value={time} onChange={(e) => (setPlaying(false), setTime(Number(e.target.value)))} />
-              <span className="num muted">
-                {Math.round(time)} / {total} ms · {frameCount} frames at {fps} fps
-              </span>
+              <div className="grow" />
+              <select value={overlay} onChange={(e) => setOverlay(e.target.value)} title="Overlay">
+                <option value="">No overlay</option>
+                <optgroup label="Grids">
+                  {GRIDS.map((g) => (
+                    <option key={g.value} value={`grid:${g.value}`}>
+                      {g.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Templates">
+                  {TEMPLATES.map((t) => (
+                    <option key={t.value} value={`tpl:${t.value}`}>
+                      {t.label}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <button data-pop="more" className={`more-btn ${moreOpen ? 'on' : ''}`} onClick={() => (setMoreOpen(!moreOpen), setSettingsOpen(false))}>
+                More
+              </button>
             </div>
-            {resolved.tracks.map((t) => (
-              <div key={t.objectId} className="tl-row">
-                <span className="tl-name">{objectName(design, t.objectId)}</span>
-                <div className="tl-track">
-                  <div
-                    className={`tl-bar ${t.objectId === resolved.matchedId ? 'matched' : t.follow ? 'follows' : ''}`}
-                    style={{ left: `${(t.motion.delayMs / Math.max(1, total)) * 100}%`, width: `${Math.max(0.5, (t.motion.durationMs / Math.max(1, total)) * 100)}%` }}
-                  />
-                  <div className="tl-head" style={{ left: `${(time / Math.max(1, total)) * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      <aside className="design-side">
-        <div className="side-block">
-          <div className="row">
-            <select value={design.id} onChange={(e) => onSelect(e.target.value)} className="grow">
-              {groups.map((g) => (
-                <optgroup key={g} label={g}>
-                  {snap.designs
-                    .filter((d) => d.group === g)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
+            {settingsOpen && (
+              <div data-pop="settings" className="popover settings-pop">
+                <label className="field">
+                  <span>Name</span>
+                  <input type="text" value={design.name} onChange={(e) => update({ ...design, name: e.target.value })} />
+                </label>
+                <label className="field">
+                  <span>Group</span>
+                  <input type="text" list="design-groups" value={design.group} onChange={(e) => update({ ...design, group: e.target.value })} />
+                  <datalist id="design-groups">
+                    {groupNames(snap).map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="field">
+                  <span>Background media player</span>
+                  <select value={mp} onChange={(e) => update({ ...design, mp: Number(e.target.value) })}>
+                    {players.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
                       </option>
                     ))}
-                </optgroup>
-              ))}
-            </select>
-            <button className="btn small" onClick={duplicate} title="Make a copy to edit">
-              Duplicate
-            </button>
-            <button className="btn ghost small" onClick={remove} title="Delete this layout">
-              Delete
-            </button>
-          </div>
-          <div className="grid2">
-            <label className="field">
-              <span>Name</span>
-              <input type="text" value={design.name} onChange={(e) => update({ ...design, name: e.target.value })} />
-            </label>
-            <label className="field">
-              <span>Group</span>
-              <input type="text" list="groups" value={design.group} onChange={(e) => update({ ...design, group: e.target.value })} />
-              <datalist id="groups">
-                {groups.map((g) => (
-                  <option key={g} value={g} />
-                ))}
-              </datalist>
-            </label>
+                    {!players.some((p) => p.value === mp) && <option value={mp}>Input {mp}</option>}
+                  </select>
+                </label>
+                <button className="btn main done" onClick={() => setSettingsOpen(false)}>
+                  Done
+                </button>
+              </div>
+            )}
+            {moreOpen && (
+              <div data-pop="more" className="popover more-pop" onMouseLeave={() => setMoreOpen(false)}>
+                <button onClick={() => (setMoreOpen(false), duplicate())}>Duplicate</button>
+                <button className="danger" onClick={() => (setMoreOpen(false), remove())}>
+                  Delete layout
+                </button>
+              </div>
+            )}
+
+            <div ref={stage} className="stage">
+              <div
+                ref={canvas}
+                className="canvas"
+                style={{ width: canvasW || '100%' }}
+                onPointerDown={() => {
+                  setSelected(null)
+                  setPreviewing(false)
+                  closePops()
+                }}
+              >
+                <LayoutView
+                  boxes={viewBoxes}
+                  background={backgroundFile(design)}
+                  labels
+                  subSize="10px"
+                  fontSize="13px"
+                  boxProps={(b) => ({
+                    style: {
+                      cursor: showPreview || b.object.locked ? 'default' : 'move',
+                      boxShadow: !showPreview && hoverBox === b.object.id ? 'inset 0 0 0 2px rgba(255,255,255,.75)' : undefined,
+                    },
+                    onPointerDown: (e) => {
+                      e.stopPropagation()
+                      if (playing) return
+                      setSelected(b.object.id)
+                      setPreviewing(false)
+                      closePops()
+                      if (!b.object.locked) drag.current = { kind: 'move', id: b.object.id, start: b.object.final, ...toUnits(e) }
+                    },
+                  })}
+                >
+                  {!showPreview && design.guide && !grid && <div className="guide" style={{ backgroundImage: `url(./${design.guide})` }} />}
+                  {!showPreview && gridLines(grid).map((s, i) => <div key={i} className="grid-line" style={s} />)}
+                </LayoutView>
+                {sel && !showPreview && !sel.locked && (
+                  <div className="sel-frame" style={boxRect(sel.final)}>
+                    {(
+                      [
+                        ['0%', '0%', 'nwse-resize'],
+                        ['100%', '0%', 'nesw-resize'],
+                        ['0%', '100%', 'nesw-resize'],
+                        ['100%', '100%', 'nwse-resize'],
+                      ] as const
+                    ).map(([left, top, cursor]) => (
+                      <div key={left + top} className="handle corner" style={{ left, top, cursor }} onPointerDown={startHandle('resize')} />
+                    ))}
+                    {(
+                      [
+                        ['0%', '50%', 'l', 'ew-resize'],
+                        ['100%', '50%', 'r', 'ew-resize'],
+                        ['50%', '0%', 't', 'ns-resize'],
+                        ['50%', '100%', 'b', 'ns-resize'],
+                      ] as const
+                    ).map(([left, top, edge, cursor]) => (
+                      <div key={edge} className="handle edge" style={{ left, top, cursor }} onPointerDown={startHandle('crop', edge)} />
+                    ))}
+                  </div>
+                )}
+                {showPreview && key && <div className="preview-label">{transitionLabel(design, key)}</div>}
+              </div>
+            </div>
           </div>
         </div>
 
-        {mode === 'layout' ? (
-          <>
-            <div className="side-block">
-              <h3 className="section-title">Boxes</h3>
-              <div className="obj-list">
-                {design.objects.map((o, i) => (
-                  <button key={o.id} className={`obj-row ${o.id === selected ? 'on' : ''}`} onClick={() => setSelected(o.id)}>
-                    <span className="obj-name">{o.name}</span>
-                    <span className="muted">{'role' in o.source ? o.source.role : `Input ${o.source.input}`}</span>
-                    <span className="muted num" title="SuperSource box number in final form">
-                      box {i + 1}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="row">
-                <button className="btn small" onClick={addObject} disabled={design.objects.length >= snap.info.boxCount}>
-                  {Icon.plus()} Add box
-                </button>
-                {sel && (
-                  <button className="btn ghost small" onClick={() => removeObject(sel.id)}>
-                    Remove {sel.name}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {sel && (
-              <div className="side-block">
-                <h3 className="section-title">{sel.name}</h3>
-                <div className="grid2">
-                  <label className="field">
-                    <span>Name</span>
-                    <input type="text" value={sel.name} onChange={(e) => setObject(sel.id, { name: e.target.value })} />
-                  </label>
-                  <label className="field">
-                    <span>Source</span>
-                    <select
-                      value={'role' in sel.source ? `role:${sel.source.role}` : `input:${sel.source.input}`}
-                      onChange={(e) => {
-                        const [kind, v] = e.target.value.split(':')
-                        setObject(sel.id, { source: kind === 'role' ? { role: v } : { input: Number(v) } })
-                      }}
-                    >
-                      <optgroup label="Roles (set per venue in Setup)">
-                        {Object.keys(roles).map((r) => (
-                          <option key={r} value={`role:${r}`}>
-                            {r}
+        <div className="anim">
+          <div className="anim-tabs">
+            {keys.map((k) => (
+              <button
+                key={k}
+                className={k === key ? 'on' : ''}
+                onClick={() => {
+                  setTKey(k)
+                  setTime(0)
+                  setPlaying(false)
+                  setPreviewing(true)
+                }}
+              >
+                <span>{transitionLabel(design, k)}</span>
+                <span className="anim-tab-sub" />
+              </button>
+            ))}
+          </div>
+          <div className="anim-controls">
+            <button
+              className="btn play"
+              disabled={!resolved}
+              onClick={() => {
+                if (!playing && time >= total) setTime(0)
+                setPreviewing(true)
+                setPlaying(!playing)
+              }}
+            >
+              {playing ? 'Pause' : 'Play'}
+            </button>
+            <input
+              type="range"
+              className="grow"
+              min={0}
+              max={total}
+              step={1}
+              value={Math.min(time, total)}
+              onChange={(e) => {
+                setPlaying(false)
+                setPreviewing(true)
+                setTime(Number(e.target.value))
+              }}
+            />
+            <span className="muted num anim-time">
+              {Math.round(Math.min(time, total))} / {resolved ? durationMs(resolved) : 0} ms
+            </span>
+          </div>
+          <div className="anim-grid anim-head">
+            <span>Box</span>
+            <span />
+            <span>{dir === 'in' ? 'Comes from' : 'Goes to'}</span>
+            <span>Delay ms</span>
+            <span>Duration ms</span>
+            <span>Easing</span>
+          </div>
+          <div className="anim-rows">
+            {resolved &&
+              design.objects.map((o) => {
+                const t = resolved.tracks.find((x) => x.objectId === o.id)!
+                const matched = o.id === resolved.matchedId
+                const follows = !!t.follow
+                const easings = STRONG[t.motion.easing] ? [...EASINGS, { value: t.motion.easing, label: STRONG[t.motion.easing]! }] : EASINGS
+                const lock = follows ? `Moves with ${objectName(design, resolved.matchedId)}, using its timing` : undefined
+                return (
+                  <div key={o.id} className="anim-grid">
+                    <span className="anim-name ellipsis">{o.name}</span>
+                    <div className="anim-track">
+                      <div
+                        className={`anim-bar ${matched ? 'matched' : ''}`}
+                        style={{ left: `${(t.motion.delayMs / total) * 100}%`, width: `${Math.max(0.5, (t.motion.durationMs / total) * 100)}%` }}
+                      />
+                      <div className="anim-head-line" style={{ left: playhead }} />
+                    </div>
+                    {matched ? (
+                      <span className="muted">{dir === 'in' ? 'Starts full screen' : 'Ends full screen'}</span>
+                    ) : (
+                      <select value={t.motion.placement ?? 'in-place'} onChange={(e) => setMotion(o.id, { placement: e.target.value as Placement })}>
+                        {PLACEMENTS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
                           </option>
                         ))}
-                      </optgroup>
-                      <optgroup label="Fixed input">
-                        {Object.values(snap.switcher.inputs)
-                          .filter((i) => i.kind === 'external' || i.kind === 'me')
-                          .map((i) => (
-                            <option key={i.id} value={`input:${i.id}`}>
-                              {i.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
-                  </label>
-                </div>
-                <div className="grid3">
-                  {(
-                    [
-                      ['x', 'X', 0.1],
-                      ['y', 'Y', 0.1],
-                      ['size', 'Size', 0.01],
-                      ['cropT', 'Crop top', 0.1],
-                      ['cropB', 'Crop bottom', 0.1],
-                      ['cropL', 'Crop left', 0.1],
-                      ['cropR', 'Crop right', 0.1],
-                    ] as [keyof BoxState, string, number][]
-                  ).map(([k, label, step]) => (
-                    <label key={k} className="field">
-                      <span>{label}</span>
-                      <input type="number" step={step} value={Math.round(sel.final[k] * 1000) / 1000} onChange={(e) => setFinal(sel.id, { [k]: Number(e.target.value) })} />
-                    </label>
-                  ))}
-                  <label className="field" title="Lower wins when more than one box shows the source on air">
-                    <span>Match priority</span>
-                    <input type="number" min={1} step={1} value={sel.matchPriority} onChange={(e) => setObject(sel.id, { matchPriority: Number(e.target.value) })} />
-                  </label>
-                </div>
-                {holes.length > 0 && (
-                  <label className="field">
-                    <span>Fit to a guide cutout</span>
-                    <select value="" onChange={(e) => e.target.value !== '' && setFinal(sel.id, fitToCutout(holes[Number(e.target.value)]))}>
-                      <option value="">Choose a cutout…</option>
-                      {holes.map((h, i) => (
-                        <option key={i} value={i}>
-                          Cutout {i + 1}: {Math.round((h.r - h.l) * 60)}×{Math.round((h.t - h.b) * 60)} px at {r2((h.l + h.r) / 2)}, {r2((h.t + h.b) / 2)}
+                      </select>
+                    )}
+                    <input type="number" step={20} min={0} value={t.motion.delayMs} disabled={follows} title={lock} onChange={(e) => setMotion(o.id, { delayMs: Math.max(0, Number(e.target.value)) })} />
+                    <input type="number" step={20} min={0} value={t.motion.durationMs} disabled={follows} title={lock} onChange={(e) => setMotion(o.id, { durationMs: Math.max(0, Number(e.target.value)) })} />
+                    <select value={t.motion.easing} disabled={follows} title={lock} onChange={(e) => setMotion(o.id, { easing: e.target.value as EasingName })}>
+                      {easings.map((x) => (
+                        <option key={x.value} value={x.value}>
+                          {x.label}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      </div>
+
+      <aside className="props">
+        <div className="props-head">
+          <h3 className="grow">Boxes</h3>
+          <button className="link" onClick={addBox} disabled={design.objects.length >= snap.info.boxCount}>
+            Add box
+          </button>
+        </div>
+        <div
+          className="box-rows"
+          onDragOver={(e) => {
+            if (boxDrag === null) return
+            e.preventDefault()
+            if (boxOver !== design.objects.length) setBoxOver(design.objects.length)
+          }}
+          onDrop={(e) => {
+            if (boxDrag === null) return
+            e.preventDefault()
+            moveBox(boxDrag, design.objects.length)
+            setBoxDrag(null)
+            setBoxOver(null)
+          }}
+        >
+          {design.objects.map((o, i) => (
+            <button
+              key={o.id}
+              className={`box-row ${o.id === selected ? 'on' : ''} ${boxDrag === i ? 'dragging' : ''} ${boxOver === i && boxDrag !== i ? 'drop-before' : ''}`}
+              draggable
+              onDragStart={(e) => {
+                setBoxDrag(i)
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/sds-box', o.id)
+              }}
+              onDragOver={(e) => {
+                if (boxDrag === null) return
+                e.preventDefault()
+                e.stopPropagation()
+                if (boxOver !== i) setBoxOver(i)
+              }}
+              onDrop={(e) => {
+                if (boxDrag === null) return
+                e.preventDefault()
+                e.stopPropagation()
+                moveBox(boxDrag, i)
+                setBoxDrag(null)
+                setBoxOver(null)
+              }}
+              onDragEnd={() => {
+                setBoxDrag(null)
+                setBoxOver(null)
+              }}
+              onClick={() => {
+                setSelected(o.id)
+                setPreviewing(false)
+              }}
+              onMouseEnter={() => setHoverBox(o.id)}
+              onMouseLeave={() => setHoverBox(null)}
+            >
+              <span className="box-row-name">
+                <span className="ellipsis">{o.name}</span>
+                {o.locked && <span className="lock" title="Locked" />}
+              </span>
+              <span className="muted">{roleOf(o)}</span>
+            </button>
+          ))}
+          <div className={`box-rows-end ${boxOver === design.objects.length ? 'drop-before' : ''}`} />
+        </div>
+        {sel && (
+          <>
+            <div className="props-pad">
+              <button className="btn wide" onClick={() => setObject(sel.id, { locked: !sel.locked })}>
+                {sel.locked ? 'Unlock box' : 'Lock box'}
+              </button>
+            </div>
+            <div className="props-pad props-fields">
+              <div className="field-stack">
+                <label className="field">
+                  <span>Name</span>
+                  <input type="text" value={sel.name} onChange={(e) => setObject(sel.id, { name: e.target.value })} />
+                </label>
+                <label className="field">
+                  <span>Source</span>
+                  <select
+                    value={'role' in sel.source ? `role:${sel.source.role}` : `input:${sel.source.input}`}
+                    onChange={(e) => {
+                      const [kind, v] = e.target.value.split(/:(.*)/)
+                      setObject(sel.id, { source: kind === 'role' ? { role: v } : { input: Number(v) } })
+                    }}
+                  >
+                    {roles.map((r) => (
+                      <option key={r} value={`role:${r}`}>
+                        {r}
+                      </option>
+                    ))}
+                    {'input' in sel.source && <option value={`input:${sel.source.input}`}>Input {sel.source.input}</option>}
+                  </select>
+                </label>
+              </div>
+              <div className="grid3">
+                {fields([
+                  ['x', 'X'],
+                  ['y', 'Y'],
+                  ['size', 'Size %'],
+                ])}
+              </div>
+              <div className="field-stack">
+                <button className="fold" onClick={() => setCropOpen(!cropOpen)}>
+                  <span className={`arrow ${cropOpen ? 'open' : ''}`}>›</span>
+                  <span className="grow">Crop</span>
+                  <span className="muted">{(['cropT', 'cropB', 'cropL', 'cropR'] as const).some((k) => sel.final[k] > 0) ? 'On' : 'None'}</span>
+                </button>
+                {cropOpen && (
+                  <>
+                    <div className="grid2">
+                      {fields([
+                        ['cropT', 'Top'],
+                        ['cropB', 'Bottom'],
+                        ['cropL', 'Left'],
+                        ['cropR', 'Right'],
+                      ])}
+                    </div>
+                    {holes.length > 0 && (
+                      <select value="" onChange={(e) => e.target.value !== '' && setFinal(sel.id, fitToCutout(holes[Number(e.target.value)]))}>
+                        <option value="">Fit to cutout…</option>
+                        {holes.map((h, i) => (
+                          <option key={i} value={i}>
+                            Cutout {i + 1}, {Math.round((h.r - h.l) * 60)} × {Math.round((h.t - h.b) * 60)} px
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
                 )}
               </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="side-block">
-              <h3 className="section-title">Transitions</h3>
-              <p className="muted small-text">One per source: IN when the layout is taken from that source full screen, OUT when going to it.</p>
-              <div className="t-list">
-                {transitionKeys(design).map((k) => (
-                  <button key={k} className={`t-row ${k === tKey ? 'on' : ''}`} onClick={() => (setTKey(k), setTime(0), setPlaying(false))}>
-                    <span>{transitionLabel(design, k)}</span>
-                    <span className="muted">{design.transitions[k] ? 'Custom' : parseTransitionKey(k).direction === 'out' && design.transitions[`in:${parseTransitionKey(k).objectId}`] ? 'Reverse of IN' : 'Default'}</span>
-                  </button>
-                ))}
-              </div>
+              <button className="link danger remove-box" onClick={() => removeBox(sel.id)}>
+                Remove box
+              </button>
             </div>
-            {resolved && (
-              <div className="side-block">
-                <div className="row spread">
-                  <h3 className="section-title">{transitionLabel(design, resolved.key)}</h3>
-                  {design.transitions[resolved.key] && (
-                    <button className="btn ghost small" onClick={resetTransition}>
-                      Reset
-                    </button>
-                  )}
-                </div>
-                {resolved.tracks.map((t) => {
-                  const matched = t.objectId === resolved.matchedId
-                  return (
-                    <div key={t.objectId} className="motion-row">
-                      <div className="row spread">
-                        <strong>{objectName(design, t.objectId)}</strong>
-                        <span className="muted">{matched ? (resolved.direction === 'in' ? 'starts full screen' : 'ends full screen') : ORIGIN_LABEL[t.origin]}</span>
-                      </div>
-                      {!matched && (
-                        <label className="field">
-                          <span>{resolved.direction === 'in' ? 'Comes from' : 'Goes to'}</span>
-                          <select value={t.motion.placement ?? 'in-place'} onChange={(e) => setMotion(t.objectId, { placement: e.target.value as Placement })}>
-                            {PLACEMENTS.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                      {t.follow ? (
-                        <p className="muted small-text">
-                          Moves with {objectName(design, resolved.matchedId)}, against its {t.follow.side === 'right' ? 'right' : t.follow.side === 'left' ? 'left' : t.follow.side === 'above' ? 'top' : 'bottom'}{' '}
-                          edge, using its timing.
-                        </p>
-                      ) : !matched && t.motion.placement === 'pushed' ? (
-                        <p className={`small-text ${t.origin === 'custom' ? 'warn-text' : 'muted'}`}>
-                          Stays in place: it overlaps {objectName(design, resolved.matchedId)} both ways in the layout, so there's no edge to push against.
-                        </p>
-                      ) : null}
-                      {!t.follow && (
-                      <div className="grid3">
-                        <label className="field">
-                          <span>Delay ms</span>
-                          <input type="number" step={20} min={0} value={t.motion.delayMs} onChange={(e) => setMotion(t.objectId, { delayMs: Math.max(0, Number(e.target.value)) })} />
-                        </label>
-                        <label className="field">
-                          <span>Duration ms</span>
-                          <input type="number" step={20} min={0} value={t.motion.durationMs} onChange={(e) => setMotion(t.objectId, { durationMs: Math.max(0, Number(e.target.value)) })} />
-                        </label>
-                        <label className="field">
-                          <span>Easing</span>
-                          <select value={t.motion.easing} onChange={(e) => setMotion(t.objectId, { easing: e.target.value as EasingName })}>
-                            {(Object.keys(EASINGS) as EasingName[]).map((k) => (
-                              <option key={k} value={k}>
-                                {k}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
           </>
         )}
+        <div className="props-foot">
+          <button className="btn tall" disabled={!canUndo(design.id)} onClick={() => undo(design.id)}>
+            Undo
+          </button>
+          <span className="grow muted save-status">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+          <button className={`btn tall ${dirty ? 'main' : 'idle'}`} onClick={() => void save(design.id)}>
+            Save design
+          </button>
+        </div>
       </aside>
-    </div>
+    </main>
   )
 }

@@ -15,7 +15,7 @@ export interface SimOptions {
   mixFrames?: number // auto transition length
 }
 
-const DEFAULT_CAMERAS = ['Presenter cam', 'Slides PC', 'Wide', 'Guest', 'Camera 5', 'Camera 6', 'Camera 7', 'Camera 8']
+const DEFAULT_CAMERAS = ['Presenter cam', 'Slides PC', 'Wide', 'Guest', 'Slides PC 2', 'Camera 6', 'Slides PC 3', 'Slides PC 4', 'Camera 9', 'Camera 10', 'Camera 11', 'Camera 12']
 
 const emptyBox = (i: number): BoxRaw => ({
   enabled: false,
@@ -53,6 +53,7 @@ export class SimSwitcher extends Emitter implements Switcher {
       superSourceCount,
       boxCount: 4,
       macroCount: 100,
+      mediaPlayers: 2,
       simulated: true,
     }
 

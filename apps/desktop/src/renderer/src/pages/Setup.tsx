@@ -1,111 +1,76 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ShowSettings } from '@sds/core/browser'
-import type { AppSnapshot, FoundSwitcher } from '../../../shared/api'
-import { Section } from '../ui'
+import type { AppSnapshot, FoundSwitcher, ModuleDownload } from '../../../shared/api'
+import { mediaPlayers } from '../shared'
+import { CheckRow } from '../ui'
 
 export function Setup({ snap }: { snap: AppSnapshot }) {
   const s = snap.settings
-  const [newRole, setNewRole] = useState('')
+  const c = snap.connection
   const set = (patch: Partial<ShowSettings>) => void window.sds.setSettings({ ...s, ...patch })
-  const inputs = Object.values(snap.switcher.inputs)
-  const videoSources = inputs.filter((i) => i.kind === 'external' || i.kind === 'me')
-  const players = inputs.filter((i) => i.kind === 'mediaplayer')
-  const usedBy = (role: string) => snap.designs.filter((d) => d.objects.some((o) => 'role' in o.source && o.source.role === role)).length
+  const [debug, setDebug] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const connect = async (mode: 'simulator' | 'atem', address: string) => {
+    setError(null)
+    const res = await window.sds.setConnection(mode, address)
+    if (!res.ok) setError(res.error)
+  }
+
+  const players = mediaPlayers(snap)
+  const live = c.status === 'connected' || c.status === 'simulator'
+  const late = c.lastTakeLateMs
 
   return (
-    <div className="setup">
-      <SwitcherSection snap={snap} />
+    <main className="column-page">
+      <div className="column">
+        <h3 className="col-title">Switcher</h3>
+        <div className="rows">
+          {c.mode === 'atem' && <AddressRow snap={snap} onConnect={(a) => void connect('atem', a)} />}
+          {(error || (c.mode === 'atem' && c.error)) && <div className="row-note bad">{error ?? c.error}</div>}
+          <div className="row setting">
+            <span className="grow">Model</span>
+            <span className="muted">{live ? snap.info.model : c.status === 'connecting' ? 'Connecting…' : 'Not connected'}</span>
+          </div>
+          <div className="row setting">
+            <span className="grow">Frame rate</span>
+            <span className="muted num">{live ? `${snap.info.fps} fps` : 'Not connected'}</span>
+          </div>
+        </div>
 
-      <Section title="Roles">
-        <p className="muted small-text">Layouts use roles, not input numbers. Set them once per venue and every layout follows.</p>
-        <table className="roles">
-          <tbody>
-            {Object.entries(s.roles).map(([role, input]) => (
-              <tr key={role}>
-                <td>{role}</td>
-                <td>
-                  <select value={input} onChange={(e) => set({ roles: { ...s.roles, [role]: Number(e.target.value) } })}>
-                    {videoSources.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.short} · {i.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="muted num">{usedBy(role)} layouts</td>
-                <td>
-                  <button
-                    className="btn ghost small"
-                    disabled={usedBy(role) > 0}
-                    title={usedBy(role) > 0 ? 'In use by a layout' : 'Remove this role'}
-                    onClick={() => {
-                      const { [role]: _gone, ...rest } = s.roles
-                      set({ roles: rest })
-                    }}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <form
-          className="row"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const name = newRole.trim()
-            if (!name || s.roles[name] !== undefined) return
-            set({ roles: { ...s.roles, [name]: videoSources[0]?.id ?? 1 } })
-            setNewRole('')
-          }}
-        >
-          <input type="text" placeholder="New role, e.g. Lectern" value={newRole} onChange={(e) => setNewRole(e.target.value)} />
-          <button className="btn small" type="submit" disabled={!newRole.trim()}>
-            Add role
-          </button>
-        </form>
-      </Section>
-
-      <Section title="Takes">
-        <div className="setup-grid">
-          <label className="field">
-            <span>Take on</span>
-            <select value={s.takeMe} onChange={(e) => set({ takeMe: Number(e.target.value) })}>
-              {Array.from({ length: snap.info.meCount }, (_, i) => (
+        <h3 className="col-title">Takes</h3>
+        <div className="rows">
+          <div className="row setting">
+            <span className="grow">Take on</span>
+            <select className="setting-select" value={s.takeMe} onChange={(e) => set({ takeMe: Number(e.target.value) })}>
+              {Array.from({ length: Math.max(snap.info.meCount, s.takeMe + 1) }, (_, i) => (
                 <option key={i} value={i}>
                   M/E {i + 1}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="field">
-            <span>Background (Slide 01) is in</span>
-            <select value={s.backgroundInput} onChange={(e) => set({ backgroundInput: Number(e.target.value) })}>
+          </div>
+          <div className="row setting">
+            <span className="grow">Default background for new layouts</span>
+            <select className="setting-select" value={s.backgroundInput} onChange={(e) => set({ backgroundInput: Number(e.target.value) })}>
               {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+                <option key={p.value} value={p.value}>
+                  {p.label}
                 </option>
               ))}
+              {!players.some((p) => p.value === s.backgroundInput) && <option value={s.backgroundInput}>Input {s.backgroundInput}</option>}
             </select>
-          </label>
+          </div>
+          <CheckRow label="Animate when keys are on air" on={s.animateWithKeysOnAir} onChange={(on) => set({ animateWithKeysOnAir: on })} />
         </div>
-        <label className="toggle">
-          <input type="checkbox" checked={s.animateWithKeysOnAir} onChange={(e) => set({ animateWithKeysOnAir: e.target.checked })} />
-          Animate when the source comes through an M/E with keys on air (the keys drop at the cut)
-        </label>
-        <p className="muted small-text">Takes made on the panel or in ATEM Software Control never animate. The layout goes to air as it is.</p>
-      </Section>
 
-      <Section title="Companion">
-        <p className="muted small-text">
-          The SuperDuperSource Companion module connects here. Its buttons load layouts and run SS CUT and SS AUTO, with tally from this app.
-        </p>
-        <div className="setup-grid">
-          <label className="field">
-            <span>Port</span>
+        <h3 className="col-title">Companion</h3>
+        <div className="rows">
+          <div className="row setting">
+            <span className="grow">Port</span>
             <input
               type="number"
+              className="port"
               min={1024}
               max={65535}
               defaultValue={s.localApi.port}
@@ -113,60 +78,63 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
               onBlur={(e) => {
                 const port = Number(e.target.value)
                 if (port >= 1024 && port <= 65535 && port !== s.localApi.port) set({ localApi: { ...s.localApi, port } })
+                else e.target.value = String(s.localApi.port)
               }}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
             />
-          </label>
-          <div className="field">
-            <span>Status</span>
-            <div className={`chip ${snap.companion.listening ? (snap.companion.clients > 0 ? 'ok' : '') : 'warn'}`}>
-              <span className="dot" />
-              {snap.companion.listening
-                ? `${snap.companion.host}:${snap.companion.port} · ${snap.companion.clients === 0 ? 'no Companion connected' : snap.companion.clients === 1 ? '1 Companion connected' : `${snap.companion.clients} connected`}`
-                : (snap.companion.error ?? 'Not listening')}
+          </div>
+          <CheckRow label="Allow Companion on another computer" on={s.localApi.allowRemote} onChange={(on) => set({ localApi: { ...s.localApi, allowRemote: on } })} />
+          <div className="row setting">
+            <span className="grow">Status</span>
+            {snap.companion.listening ? (
+              snap.companion.clients > 0 ? (
+                <span className="ok-text">{snap.companion.clients === 1 ? '1 Companion connected' : `${snap.companion.clients} Companions connected`}</span>
+              ) : (
+                <span className="muted">Waiting for Companion</span>
+              )
+            ) : (
+              <span className="bad-text">{snap.companion.error ?? 'Not listening'}</span>
+            )}
+          </div>
+          <ModuleRow />
+        </div>
+
+        <h3 className="col-title">App</h3>
+        <div className="rows">
+          <CheckRow label="Start with Windows" on={snap.app.openAtLogin} onChange={(on) => void window.sds.setOpenAtLogin(on)} />
+          <UpdateRow snap={snap} />
+        </div>
+
+        <div className="debug-head">
+          <h3 className="grow muted">Debug</h3>
+          <button className="link" onClick={() => setDebug(!debug)}>
+            {debug ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        {debug && (
+          <div className="rows">
+            <CheckRow label="Use simulator instead of ATEM" on={c.mode === 'simulator'} onChange={(on) => void connect(on ? 'simulator' : 'atem', s.connection.address)} />
+            <div className="row setting">
+              <span className="grow">Last take timing</span>
+              <span className="muted num">{late ? `Within ${late.p95} ms, worst ${late.max} ms` : 'No takes yet'}</span>
             </div>
           </div>
-        </div>
-        <label className="toggle">
-          <input type="checkbox" checked={s.localApi.allowRemote} onChange={(e) => set({ localApi: { ...s.localApi, allowRemote: e.target.checked } })} />
-          Allow Companion on another computer (anyone on the network can then trigger takes)
-        </label>
-      </Section>
-
-      <Section title="App">
-        <label className="toggle">
-          <input type="checkbox" checked={snap.app.openAtLogin} onChange={(e) => void window.sds.setOpenAtLogin(e.target.checked)} />
-          Start with Windows, in the tray
-        </label>
-        <UpdateRow snap={snap} />
-        <p className="muted small-text">Closing the window keeps it running in the tray.</p>
-      </Section>
-    </div>
+        )}
+      </div>
+    </main>
   )
 }
 
-const STATUS_TEXT = {
-  simulator: 'Simulator running',
-  connecting: 'Connecting…',
-  connected: 'Connected',
-  disconnected: 'Not connected',
-}
-
-function SwitcherSection({ snap }: { snap: AppSnapshot }) {
-  const c = snap.connection
-  const [mode, setMode] = useState(c.mode)
-  const [address, setAddress] = useState(c.address)
+function AddressRow({ snap, onConnect }: { snap: AppSnapshot; onConnect: (address: string) => void }) {
+  const saved = snap.connection.address
+  const [address, setAddress] = useState(saved)
   const [found, setFound] = useState<FoundSwitcher[] | null>(null)
   const [searching, setSearching] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const changed = mode !== c.mode || (mode === 'atem' && address.trim() !== c.address)
+  useEffect(() => setAddress(saved), [saved])
 
-  const apply = async () => {
-    setError(null)
-    const res = await window.sds.setConnection(mode, address)
-    if (!res.ok) setError(res.error)
+  const apply = (a: string) => {
+    if (a.trim() !== saved) onConnect(a.trim())
   }
-
   const search = async () => {
     setSearching(true)
     setFound(null)
@@ -177,102 +145,64 @@ function SwitcherSection({ snap }: { snap: AppSnapshot }) {
     }
   }
 
-  const chip = c.status === 'connected' ? 'ok' : c.status === 'simulator' ? '' : 'warn'
-
   return (
-    <Section title="Switcher">
-      <div className="setup-grid">
-        <div className="field">
-          <span>Connection</span>
-          <div className="seg">
-            <button className={mode === 'simulator' ? 'on' : ''} onClick={() => setMode('simulator')}>
-              Simulator
-            </button>
-            <button className={mode === 'atem' ? 'on' : ''} onClick={() => setMode('atem')}>
-              ATEM over network
-            </button>
-          </div>
-        </div>
-        <div className="field">
-          <span>Status</span>
-          <div className={`chip ${chip}`}>
-            <span className="dot" />
-            {c.mode === 'atem' ? `${STATUS_TEXT[c.status]} · ${c.address}` : STATUS_TEXT[c.status]}
-          </div>
-        </div>
+    <>
+      <div className="row setting">
+        <span className="grow">IP address</span>
+        <input
+          type="text"
+          className="ip"
+          placeholder="192.168.10.240"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          onBlur={() => apply(address)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
+        <button className="btn" disabled={searching} onClick={() => void search()}>
+          {searching ? 'Searching…' : 'Find'}
+        </button>
       </div>
+      {found && found.length === 0 && <div className="row-note muted">None found. Check this PC is on the switcher's network, or type the address.</div>}
+      {found?.map((f) => (
+        <button
+          key={f.address}
+          className="found-row"
+          onClick={() => {
+            setAddress(f.address)
+            setFound(null)
+            onConnect(f.address)
+          }}
+        >
+          <span className="grow">{f.name}</span>
+          <span className="muted num">{f.address}</span>
+        </button>
+      ))}
+    </>
+  )
+}
 
-      {mode === 'atem' && (
-        <>
-          <div className="row">
-            <label className="field grow">
-              <span>Switcher IP address</span>
-              <input
-                type="text"
-                placeholder="192.168.10.240"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void apply()}
-              />
-            </label>
-            <button className="btn small align-end" onClick={() => void search()} disabled={searching}>
-              {searching ? 'Searching…' : 'Find switchers'}
-            </button>
-          </div>
-          {found && (
-            <div className="found">
-              {found.length === 0 ? (
-                <span className="muted small-text">None found. Check this PC is on the switcher's network, or type the address.</span>
-              ) : (
-                found.map((f) => (
-                  <button key={f.address} className="found-row" onClick={() => setAddress(f.address)}>
-                    <span>{f.name}</span>
-                    <span className="muted num">
-                      {f.address} · {f.via === 'bonjour' ? 'Bonjour' : 'scan'}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {changed && (
-        <div className="row">
-          <button className="btn primary small" onClick={() => void apply()}>
-            {mode === 'atem' ? 'Connect' : 'Switch to the simulator'}
-          </button>
-          <span className="muted small-text">Layouts loaded on the current switcher will need loading again.</span>
-        </div>
-      )}
-      {(error || c.error) && <p className="small-text warn-text">{error ?? c.error}</p>}
-
-      <dl className="facts">
-        <dt>Model</dt>
-        <dd>{snap.info.model}</dd>
-        <dt>Video</dt>
-        <dd className="num">{snap.info.fps} fps</dd>
-        <dt>M/Es</dt>
-        <dd className="num">{snap.info.meCount}</dd>
-        <dt>SuperSources</dt>
-        <dd className="num">
-          {snap.info.superSourceCount} × {snap.info.boxCount} boxes
-        </dd>
-        {c.lastTakeLateMs && (
-          <>
-            <dt title="How late this PC sent each frame of the last take">Last take</dt>
-            <dd className="num">
-              frames sent within {c.lastTakeLateMs.p95} ms of time (worst {c.lastTakeLateMs.max} ms)
-            </dd>
-          </>
-        )}
-      </dl>
-      <p className="muted small-text">
-        Takes are streamed from this PC, one batch of box moves per frame, so they need a steady network to the switcher. A wired connection on the same
-        switch is best.
-      </p>
-    </Section>
+function ModuleRow() {
+  const [state, setState] = useState<'idle' | 'busy' | ModuleDownload>('idle')
+  const done = typeof state === 'object' && state.ok
+  const run = async () => {
+    setState('busy')
+    setState(await window.sds.downloadModule())
+  }
+  return (
+    <div className="row setting">
+      <span className="grow two-line">
+        <span>Install Companion module on this PC</span>
+        {typeof state === 'object' &&
+          (state.ok ? (
+            <span className="small ok-text">Version {state.version} saved to Downloads. In Companion, open Modules and use Import module package.</span>
+          ) : (
+            <span className="small bad-text">{state.error}</span>
+          ))}
+      </span>
+      <button className="btn" disabled={state === 'busy'} onClick={() => void run()}>
+        {state === 'busy' ? 'Installing…' : done ? 'Reinstall' : 'Install'}
+      </button>
+    </div>
   )
 }
 
@@ -280,30 +210,26 @@ function UpdateRow({ snap }: { snap: AppSnapshot }) {
   const u = snap.app.update
   const when = u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString() : null
   const text: Record<typeof u.status, string> = {
-    dev: 'Updates are off in development builds.',
-    idle: 'Checks for updates shortly after starting, then every 6 hours.',
-    checking: 'Checking for updates…',
-    none: `Up to date${when ? ` (checked ${when})` : ''}.`,
-    downloading: `Downloading ${u.version ?? 'an update'}${u.percent ? `: ${u.percent}%` : '…'}`,
-    ready: `Version ${u.version} is ready. It installs next time the app quits, or restart now.`,
+    dev: 'Updates are off in development builds',
+    idle: 'Checks shortly after starting, then every 6 hours',
+    checking: 'Checking…',
+    none: when ? `Up to date, checked ${when}` : 'Up to date',
+    downloading: `Downloading ${u.version ?? 'an update'}${u.percent ? `, ${u.percent}%` : '…'}`,
+    ready: `Version ${u.version} is ready. It installs when the app quits, or restart now.`,
     error: `Couldn't check for updates: ${u.error ?? 'unknown error'}`,
   }
   return (
-    <div className="update-row">
-      <div>
-        <div className="num">Version {snap.app.version}</div>
-        <div className={`small-text ${u.status === 'error' ? 'warn-text' : 'muted'}`}>{text[u.status]}</div>
-      </div>
+    <div className="row setting">
+      <span className="grow two-line">
+        <span className="num">Version {snap.app.version}</span>
+        <span className={`small ${u.status === 'error' ? 'bad-text' : 'muted'}`}>{text[u.status]}</span>
+      </span>
       {u.status === 'ready' ? (
-        <button
-          className="btn primary small"
-          title="The switcher keeps its picture. Companion buttons pause until the app is back."
-          onClick={() => void window.sds.installUpdate()}
-        >
+        <button className="btn main" title="The switcher keeps its picture. Companion buttons pause until the app is back." onClick={() => void window.sds.installUpdate()}>
           Restart and update
         </button>
       ) : (
-        <button className="btn small" disabled={u.status === 'dev' || u.status === 'checking' || u.status === 'downloading'} onClick={() => void window.sds.checkForUpdates()}>
+        <button className="btn" disabled={u.status === 'dev' || u.status === 'checking' || u.status === 'downloading'} onClick={() => void window.sds.checkForUpdates()}>
           Check now
         </button>
       )}

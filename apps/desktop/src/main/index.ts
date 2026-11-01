@@ -4,6 +4,7 @@ import { AtemSwitcher, discoverSwitchers } from '@sds/atem'
 import { Design, Engine, ShowSettings, SimSwitcher } from '@sds/core'
 import { AppSnapshot, CHANNEL, ConnectionInfo, Result } from '../shared/api'
 import { LocalApi } from './localApi'
+import { downloadModule } from './module'
 import { loadShow, saveShow } from './store'
 import { Updates } from './updates'
 
@@ -101,7 +102,8 @@ async function useConnection(mode: 'simulator' | 'atem', address: string) {
   if (old instanceof SimSwitcher) old.stop()
   else await old.close()
 
-  if (mode === 'atem' && address) {
+  if (mode === 'atem') {
+    // With no address yet it just sits disconnected until one is entered in Setup.
     const atem = new AtemSwitcher(address)
     atem.on('status', push)
     atem.on('error', push)
@@ -110,7 +112,7 @@ async function useConnection(mode: 'simulator' | 'atem', address: string) {
       if (switcher === atem && engine.slots.length !== atem.info.superSourceCount) rebuildEngine()
     })
     switcher = atem
-    atem.connect()
+    if (address) atem.connect()
   } else {
     const sim = new SimSwitcher({ fps: 50 })
     sim.start()
@@ -130,16 +132,16 @@ function persist() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1120,
-    height: 720,
-    minWidth: 960,
-    minHeight: 600,
+    width: 1280,
+    height: 800,
+    minWidth: 1100,
+    minHeight: 700,
     show: false,
-    backgroundColor: '#121315',
+    backgroundColor: '#0f0f0f',
     title: 'SuperDuperSource',
     icon: icon(256),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#121315', symbolColor: '#b8bcc4', height: 38 },
+    titleBarOverlay: { color: '#0f0f0f', symbolColor: '#8c8c8c', height: 40 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -215,13 +217,14 @@ ipcMain.handle(CHANNEL.setOpenAtLogin, (_e, on: boolean) => {
 ipcMain.handle(CHANNEL.setConnection, (_e, mode: 'simulator' | 'atem', address: string) =>
   ok(async () => {
     const addr = address.trim()
-    if (mode === 'atem' && !/^\d{1,3}(\.\d{1,3}){3}$/.test(addr)) throw new Error("Enter the switcher's IP address, for example 192.168.10.240")
+    if (mode === 'atem' && addr && !/^\d{1,3}(\.\d{1,3}){3}$/.test(addr)) throw new Error("Enter the switcher's IP address, for example 192.168.10.240")
     show.settings = { ...show.settings, connection: { mode, address: mode === 'atem' ? addr : show.settings.connection.address } }
     saveShow(show)
     await useConnection(mode, addr)
   }),
 )
 ipcMain.handle(CHANNEL.discover, () => discoverSwitchers(3))
+ipcMain.handle(CHANNEL.downloadModule, () => downloadModule())
 ipcMain.handle(CHANNEL.checkForUpdates, () => updates.check())
 ipcMain.handle(CHANNEL.installUpdate, () => updates.install(() => (quitting = true)))
 

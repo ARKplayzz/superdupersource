@@ -1,4 +1,4 @@
-import { Design, DesignObject } from './model'
+import { DEFAULT_SETTINGS, Design, DesignObject, ShowSettings } from './model'
 import { box } from './units'
 
 // Starter designs built from the cutout templates in Supersources-templates/.
@@ -26,8 +26,8 @@ export const SLIDE_10: Design = {
   background: BACKGROUND,
   guide: 'Slide_10.PNG',
   objects: [
-    obj('A', 'Slides', 'Slides', MAIN, 2),
-    obj('B', 'Presenter', 'Presenter', box({ x: 12, y: 0, size: 0.5, cropL: 8, cropR: 8 }), 1),
+    obj('A', 'Presentation', 'Presentation', MAIN, 2),
+    obj('B', 'Static', 'Static', box({ x: 12, y: 0, size: 0.5, cropL: 8, cropR: 8 }), 1),
   ],
   transitions: {
     'in:B': {
@@ -50,7 +50,7 @@ export const SLIDE_10: Design = {
 }
 
 // The same layout, but the box that isn't going full screen rides against the other one's edge:
-// the slides push the presenter off (and pull it back in), and the presenter pushes the slides.
+// the slides push the static camera off (and pull it back in), and the camera pushes the slides.
 export const SLIDE_10_PUSH: Design = {
   ...SLIDE_10,
   id: 'slide-10-push',
@@ -83,7 +83,7 @@ export const SLIDE_11: Design = {
   group: 'Main + side column',
   background: BACKGROUND,
   guide: 'Slide_11.PNG',
-  objects: [obj('A', 'Slides', 'Slides', MAIN, 3), obj('B', 'Presenter', 'Presenter', SIDE(3), 1), obj('C', 'Wide', 'Wide', SIDE(-3), 2)],
+  objects: [obj('A', 'Presentation', 'Presentation', MAIN, 3), obj('B', 'Static', 'Static', SIDE(3), 1), obj('C', 'Wide', 'Wide', SIDE(-3), 2)],
   transitions: {},
 }
 
@@ -94,10 +94,10 @@ export const SLIDE_12: Design = {
   background: BACKGROUND,
   guide: 'Slide_12.PNG',
   objects: [
-    obj('A', 'Slides', 'Slides', MAIN, 4),
-    obj('B', 'Presenter', 'Presenter', SIDE(4.5), 1),
+    obj('A', 'Presentation', 'Presentation', MAIN, 4),
+    obj('B', 'Static', 'Static', SIDE(4.5), 1),
     obj('C', 'Wide', 'Wide', SIDE(0), 2),
-    obj('D', 'Guest', 'Guest', SIDE(-4.5), 3),
+    obj('D', 'Camera 3', 'Camera 3', SIDE(-4.5), 3),
   ],
   transitions: {},
 }
@@ -109,8 +109,8 @@ export const SLIDE_02: Design = {
   background: BACKGROUND,
   guide: 'Slide_02.PNG',
   objects: [
-    obj('A', 'Presenter', 'Presenter', box({ x: -7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 1),
-    obj('B', 'Slides', 'Slides', box({ x: 7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 2),
+    obj('A', 'Static', 'Static', box({ x: -7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 1),
+    obj('B', 'Presentation', 'Presentation', box({ x: 7.5, y: 0, size: 0.75, cropL: 6, cropR: 6 }), 2),
   ],
   transitions: {},
 }
@@ -123,7 +123,7 @@ export const SLIDE_03: Design = {
   group: 'Grid',
   background: BACKGROUND,
   guide: 'Slide_03.PNG',
-  objects: [obj('A', 'Wide', 'Wide', PORTRAIT(-10.5), 2), obj('B', 'Presenter', 'Presenter', PORTRAIT(0), 1), obj('C', 'Guest', 'Guest', PORTRAIT(10.5), 3)],
+  objects: [obj('A', 'Wide', 'Wide', PORTRAIT(-10.5), 2), obj('B', 'Static', 'Static', PORTRAIT(0), 1), obj('C', 'Camera 3', 'Camera 3', PORTRAIT(10.5), 3)],
   transitions: {},
 }
 
@@ -136,18 +136,58 @@ export const SLIDE_04: Design = {
   background: BACKGROUND,
   guide: 'Slide_04.PNG',
   objects: [
-    obj('A', 'Presenter', 'Presenter', QUAD(-6.4, 3.6), 1),
-    obj('B', 'Slides', 'Slides', QUAD(6.4, 3.6), 2),
+    obj('A', 'Static', 'Static', QUAD(-6.4, 3.6), 1),
+    obj('B', 'Presentation', 'Presentation', QUAD(6.4, 3.6), 2),
     obj('C', 'Wide', 'Wide', QUAD(-6.4, -3.55), 3),
-    obj('D', 'Guest', 'Guest', QUAD(6.4, -3.55), 4),
+    obj('D', 'Camera 3', 'Camera 3', QUAD(6.4, -3.55), 4),
+  ],
+  transitions: {},
+}
+
+// Two 16:9 boxes with the same 0.8 unit margin at the edges and between them.
+export const TWO_PRESENTATIONS: Design = {
+  id: 'two-presentations',
+  name: 'Two presentations',
+  group: 'Grid',
+  background: BACKGROUND,
+  objects: [
+    obj('A', 'Presentation', 'Presentation', box({ x: -7.8, y: 0, size: 0.4625 }), 1),
+    obj('B', 'Presentation 2', 'Presentation 2', box({ x: 7.8, y: 0, size: 0.4625 }), 2),
   ],
   transitions: {},
 }
 
 // Slides 05 and 06 need 5 and 6 boxes, more than one SuperSource has. Static only in v1 (project.md §4.4).
-export const STARTER_DESIGNS: Design[] = [SLIDE_10, SLIDE_10_PUSH, SLIDE_11, SLIDE_12, SLIDE_02, SLIDE_03, SLIDE_04]
+export const STARTER_DESIGNS: Design[] = [SLIDE_10, SLIDE_10_PUSH, SLIDE_11, SLIDE_12, SLIDE_02, TWO_PRESENTATIONS, SLIDE_03, SLIDE_04]
 
-export const DEFAULT_ROLES = ['Presenter', 'Slides', 'Wide', 'Guest']
+// The sources a show has, in the order the Sources page lists them.
+export const DEFAULT_ROLES = Object.keys(DEFAULT_SETTINGS.roles)
+
+// Roles renamed in 0.2: shows saved before then used the old names.
+const ROLE_RENAMES: Record<string, string> = { Slides: 'Presentation', Presenter: 'Static', Guest: 'Camera 3' }
+
+// Brings a saved show up to date: renamed roles (keeping their inputs), any new default roles,
+// and a group order. Safe to run on a show that's already current.
+export function migrateShow(designs: Design[], settings: ShowSettings): { designs: Design[]; settings: ShowSettings } {
+  const roles: Record<string, number> = {}
+  for (const [role, input] of Object.entries(settings.roles)) if (!ROLE_RENAMES[role]) roles[role] = input
+  for (const [role, input] of Object.entries(settings.roles)) if (ROLE_RENAMES[role] && roles[ROLE_RENAMES[role]] === undefined) roles[ROLE_RENAMES[role]] = input
+  for (const [role, input] of Object.entries(DEFAULT_SETTINGS.roles)) if (roles[role] === undefined) roles[role] = input
+  // Default roles first, in their order, then any the user added.
+  const ordered = Object.fromEntries([...DEFAULT_ROLES.map((r) => [r, roles[r]] as const), ...Object.entries(roles).filter(([r]) => !DEFAULT_ROLES.includes(r))])
+
+  const migrated = designs.map((d) => ({
+    ...d,
+    objects: d.objects.map((o) => {
+      if (!('role' in o.source) || !ROLE_RENAMES[o.source.role]) return o
+      const old = o.source.role
+      return { ...o, name: o.name === old ? ROLE_RENAMES[old] : o.name, source: { role: ROLE_RENAMES[old] } }
+    }),
+  }))
+  const seen = [...new Set(migrated.map((d) => d.group).filter((g) => g))]
+  const groups = settings.groups ? [...settings.groups, ...seen.filter((g) => !settings.groups.includes(g))] : seen
+  return { designs: migrated, settings: { ...settings, roles: ordered, groups } }
+}
 
 // Starter layouts that shipped before shows remembered which ones they'd seen.
 const FIRST_STARTERS = ['slide-10', 'slide-11', 'slide-12', 'slide-02', 'slide-03', 'slide-04']

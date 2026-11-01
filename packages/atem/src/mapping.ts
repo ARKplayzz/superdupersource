@@ -58,7 +58,7 @@ const emptyBox = (): BoxRaw => ({
 export const DISCONNECTED_STATE: SwitcherState = { mixEffects: [EMPTY_ME], superSources: [], auxes: [], inputs: {} }
 
 export function placeholderInfo(address: string): SwitcherInfo {
-  return { model: `ATEM at ${address}`, fps: 50, meCount: 1, superSourceCount: 0, boxCount: 4, macroCount: 0, simulated: false }
+  return { model: `ATEM at ${address}`, fps: 50, meCount: 1, superSourceCount: 0, boxCount: 4, macroCount: 0, mediaPlayers: 2, simulated: false }
 }
 
 export function mapInfo(s: AtemState, address: string): SwitcherInfo {
@@ -71,6 +71,7 @@ export function mapInfo(s: AtemState, address: string): SwitcherInfo {
     superSourceCount: caps?.superSources ?? s.video.superSources.length,
     boxCount: s.info.superSources.find((x) => x)?.boxCount ?? 4,
     macroCount: s.info.macroPool?.macroCount ?? 0,
+    mediaPlayers: Math.min(4, caps?.mediaPlayers ?? s.media.players.length ?? 2),
     simulated: false,
   }
 }

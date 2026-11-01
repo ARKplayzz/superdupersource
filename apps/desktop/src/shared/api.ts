@@ -41,6 +41,8 @@ export interface FoundSwitcher {
 
 export type Result = { ok: true } | { ok: false; error: string }
 
+export type ModuleDownload = { ok: true; version: string; path: string } | { ok: false; error: string }
+
 export interface SdsApi {
   getSnapshot(): Promise<AppSnapshot>
   onSnapshot(listener: (s: AppSnapshot) => void): () => void
@@ -53,6 +55,8 @@ export interface SdsApi {
   setOpenAtLogin(on: boolean): Promise<void>
   setConnection(mode: 'simulator' | 'atem', address: string): Promise<Result>
   discover(): Promise<FoundSwitcher[]>
+  // Saves the Companion module from the latest release to Downloads, ready to import in Companion.
+  downloadModule(): Promise<ModuleDownload>
   checkForUpdates(): Promise<void>
   installUpdate(): Promise<boolean>
   // Simulator panel controls: play the operator at a switcher panel.
@@ -76,6 +80,7 @@ export const CHANNEL = {
   setOpenAtLogin: 'sds:set-open-at-login',
   setConnection: 'sds:set-connection',
   discover: 'sds:discover',
+  downloadModule: 'sds:download-module',
   checkForUpdates: 'sds:check-updates',
   installUpdate: 'sds:install-update',
   simCut: 'sds:sim-cut',

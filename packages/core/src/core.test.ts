@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { Engine } from './engine'
 import { lerpBox, offscreen, visibleRect } from './geometry'
-import { SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, mergeNewStarters } from './library'
+import { SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, mergeNewStarters, migrateShow } from './library'
 import { findMatch, resolveSource } from './matching'
 import { DEFAULT_SETTINGS, ShowSettings } from './model'
 import { planIn, planOut } from './plan'
@@ -44,6 +44,15 @@ describe('geometry', () => {
     }
   })
 
+  test('an edge in the same place at both ends stays put', () => {
+    // Slides full screen -> main box: the left edge sits on the frame edge the whole time.
+    const to = SLIDE_10.objects[0].final
+    for (let i = 0; i <= 10; i++) {
+      const r = visibleRect(lerpBox(FULLSCREEN, to, i / 10))
+      expect(r.l).toBeCloseTo(-16, 6)
+    }
+  })
+
   test('offscreen puts the visible edge just past the frame', () => {
     const b = SLIDE_10.objects[1].final
     expect(visibleRect(offscreen(b, 'right')).l).toBeCloseTo(16.5)
@@ -58,6 +67,14 @@ describe('geometry', () => {
 })
 
 describe('starter designs', () => {
+  test('two presentations have the same margin at the edges and between them', () => {
+    const [l, r] = TWO_PRESENTATIONS.objects.map((o) => visibleRect(o.final))
+    expect(l.l + 16).toBeCloseTo(0.8, 6)
+    expect(r.l - l.r).toBeCloseTo(0.8, 6)
+    expect(16 - r.r).toBeCloseTo(0.8, 6)
+  })
+
+
   test.each(STARTER_DESIGNS)('$name: every transition stays inside ATEM ranges', (design) => {
     for (const obj of design.objects) {
       for (const dir of ['in', 'out'] as const) {
@@ -184,7 +201,7 @@ describe('matching', () => {
   test('box source is ME2 and program is the camera itself', () => {
     const s = sim()
     s.setProgram(1, CAM)
-    const viaMe = { ...settings, roles: { ...settings.roles, Presenter: meProgramInput(1) } }
+    const viaMe = { ...settings, roles: { ...settings.roles, Static: meProgramInput(1) } }
     expect(findMatch(SLIDE_10, viaMe, CAM, s.getState())).toMatchObject({ kind: 'match', objectId: 'B', how: 'via-me' })
   })
 
@@ -199,7 +216,7 @@ describe('matching', () => {
   test('same source id always matches, keys or not', () => {
     const s = sim()
     s.setKeysOnAir(1, true)
-    const viaMe = { ...settings, roles: { ...settings.roles, Presenter: meProgramInput(1) } }
+    const viaMe = { ...settings, roles: { ...settings.roles, Static: meProgramInput(1) } }
     expect(findMatch(SLIDE_10, viaMe, meProgramInput(1), s.getState())).toMatchObject({ kind: 'match', how: 'direct' })
   })
 
@@ -208,7 +225,7 @@ describe('matching', () => {
   })
 
   test('two objects match: priority decides', () => {
-    const both = { ...settings, roles: { ...settings.roles, Slides: CAM } }
+    const both = { ...settings, roles: { ...settings.roles, Presentation: CAM } }
     expect(findMatch(SLIDE_10, both, CAM, sim().getState())).toMatchObject({ kind: 'match', objectId: 'B' })
   })
 })
@@ -360,5 +377,29 @@ describe('engine with the simulator', () => {
     s.cut(0)
     const slot = await drive(s, engine.load('slide-11'))
     expect(slot.ss).toBe(1)
+  })
+})
+
+describe('saved shows', () => {
+  const old: ShowSettings = { ...DEFAULT_SETTINGS, roles: { Presenter: 7, Slides: 8, Wide: 3, Guest: 4, Lectern: 9 }, groups: undefined as unknown as string[] }
+  const oldDesign = {
+    ...SLIDE_10,
+    objects: SLIDE_10.objects.map((o) => ({ ...o, name: o.id === 'A' ? 'Slides' : 'My cam', source: { role: o.id === 'A' ? 'Slides' : 'Presenter' } })),
+  }
+
+  test('old role names move to the new ones and keep their inputs', () => {
+    const { designs, settings } = migrateShow([oldDesign], old)
+    expect(settings.roles).toMatchObject({ Presentation: 8, Static: 7, 'Camera 3': 4, Wide: 3, Lectern: 9, 'Presentation 2': 5 })
+    expect(settings.roles.Slides).toBeUndefined()
+    expect(designs[0].objects.map((o) => [o.name, o.source])).toEqual([
+      ['Presentation', { role: 'Presentation' }],
+      ['My cam', { role: 'Static' }],
+    ])
+    expect(settings.groups).toEqual(['Main + side column'])
+  })
+
+  test('running it twice changes nothing', () => {
+    const once = migrateShow([oldDesign], old)
+    expect(migrateShow(once.designs, once.settings)).toEqual(once)
   })
 })

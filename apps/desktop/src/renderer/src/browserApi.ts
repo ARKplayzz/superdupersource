@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, Design, Engine, STARTER_DESIGNS, ShowSettings, SimSwitcher, mergeNewStarters } from '@sds/core/browser'
+import { DEFAULT_SETTINGS, Design, Engine, STARTER_DESIGNS, ShowSettings, SimSwitcher, mergeNewStarters, migrateShow } from '@sds/core/browser'
 import type { AppSnapshot, Result, SdsApi } from '../../shared/api'
 
 // The same API the Electron preload provides, running entirely in the page: simulator + engine,
@@ -15,13 +15,14 @@ interface Saved {
 const KEY = 'sds-show'
 
 function read(): Saved {
-  const fresh: Saved = { designs: STARTER_DESIGNS, shortlist: ['slide-10', 'slide-10-push', 'slide-11'], settings: DEFAULT_SETTINGS, knownStarters: STARTER_DESIGNS.map((d) => d.id) }
+  const fresh: Saved = { designs: STARTER_DESIGNS, shortlist: ['slide-10', 'slide-11', 'slide-02', 'slide-04'], settings: DEFAULT_SETTINGS, knownStarters: STARTER_DESIGNS.map((d) => d.id) }
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return fresh
     const s = JSON.parse(raw) as Partial<Saved>
     const merged = s.designs?.length ? mergeNewStarters(s.designs, s.knownStarters) : { designs: fresh.designs, known: STARTER_DESIGNS.map((d) => d.id) }
-    return { designs: merged.designs, knownStarters: merged.known, shortlist: s.shortlist ?? fresh.shortlist, settings: { ...DEFAULT_SETTINGS, ...s.settings } }
+    const current = migrateShow(merged.designs, { ...DEFAULT_SETTINGS, ...s.settings })
+    return { designs: current.designs, knownStarters: merged.known, shortlist: s.shortlist ?? fresh.shortlist, settings: current.settings }
   } catch {
     return fresh
   }
@@ -114,6 +115,7 @@ export function createBrowserApi(): SdsApi {
     setConnection: async (mode) =>
       mode === 'atem' ? { ok: false, error: 'The browser version only runs the simulator. Install the Windows app to connect to an ATEM.' } : { ok: true },
     discover: async () => [],
+    downloadModule: async () => ({ ok: false, error: 'Not available in the browser version' }),
     checkForUpdates: async () => {},
     installUpdate: async () => false,
     sim: {

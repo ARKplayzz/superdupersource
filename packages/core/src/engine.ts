@@ -1,6 +1,6 @@
 import { Emitter } from './emitter'
 import { MatchResult, findMatch, inputFor } from './matching'
-import { Design, ShowSettings } from './model'
+import { Design, ShowSettings, backgroundFor } from './model'
 import { PlainTake, Plan, PlanContext, armOps, planIn, planOut } from './plan'
 import { Op, Switcher, SwitcherState, isOnAir, isOnPreview, ssInput } from './switcher'
 
@@ -108,7 +108,7 @@ export class Engine extends Emitter {
     const slot = this.freeSlot(designId)
     if (!slot) throw new Error('No free SuperSource: the only one is on air')
     const ops: Op[] = [
-      { op: 'art', ss: slot.ss, fill: this.settings.backgroundInput, behind: true },
+      { op: 'art', ss: slot.ss, fill: backgroundFor(design, this.settings), behind: true },
       ...armOps(design, this.context(slot.ss, design)),
       { op: 'preview', me: this.settings.takeMe, input: ssInput(slot.ss) },
     ]

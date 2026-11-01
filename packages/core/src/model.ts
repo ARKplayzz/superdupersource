@@ -12,6 +12,8 @@ export interface DesignObject {
   final: BoxState
   // Lower wins when more than one object matches the source on air.
   matchPriority: number
+  // Locked boxes can't be dragged in the designer.
+  locked?: boolean
 }
 
 // Where a non-matched object starts (IN) or ends (OUT).
@@ -42,6 +44,8 @@ export interface Design {
   name: string
   group: string
   background: { file: string; still?: number }
+  // Media player input (3010, 3020, ...) holding the background. Unset uses the show default.
+  mp?: number
   // Cutout template shown in the designer for alignment only. Never sent to the switcher.
   guide?: string
   objects: DesignObject[]
@@ -55,8 +59,10 @@ export interface ShowSettings {
   animateWithKeysOnAir: boolean
   // M/E that takes run on (0 = ME1).
   takeMe: number
-  // Art fill for animated layouts: the media player holding the Slide 01 background.
+  // Art fill for layouts that don't pick their own media player: the one holding the Slide 01 background.
   backgroundInput: number
+  // Library group order, including groups with no layouts yet. Layouts with group '' are ungrouped.
+  groups: string[]
   // Local API for the Companion module. allowRemote listens on every interface, not just 127.0.0.1.
   localApi: { port: number; allowRemote: boolean }
   // Which switcher the app drives.
@@ -64,13 +70,28 @@ export interface ShowSettings {
 }
 
 export const DEFAULT_SETTINGS: ShowSettings = {
-  roles: { Presenter: 1, Slides: 2, Wide: 3, Guest: 4 },
+  roles: {
+    Presentation: 2,
+    'Presentation 2': 5,
+    'Presentation 3': 7,
+    'Presentation 4': 8,
+    Static: 1,
+    Wide: 3,
+    'Camera 3': 4,
+    'Camera 4': 6,
+    'Camera 5': 9,
+    'Camera 6': 10,
+  },
   animateWithKeysOnAir: false,
   takeMe: 0,
-  backgroundInput: 3020,
+  backgroundInput: 3010,
+  groups: ['Main + side column', 'Grid'],
   localApi: { port: 8710, allowRemote: false },
   connection: { mode: 'simulator', address: '' },
 }
+
+// The background a design's art fill comes from.
+export const backgroundFor = (design: Design, settings: ShowSettings): number => design.mp ?? settings.backgroundInput
 
 export const transitionKey = (dir: Direction, objectId: string): TransitionKey => `${dir}:${objectId}`
 

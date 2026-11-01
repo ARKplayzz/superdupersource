@@ -110,6 +110,7 @@ describe('mapping', () => {
       superSourceCount: 1,
       boxCount: 4,
       macroCount: 100,
+      mediaPlayers: 2,
       simulated: false,
     })
   })
@@ -146,7 +147,7 @@ describe('AtemSwitcher', () => {
     const { sw, fake } = await connected()
     const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
     await engine.load('slide-10')
-    expect(fake.art).toEqual([{ props: { artFillSource: 3020, artOption: Enums.SuperSourceArtOption.Background }, ss: 0 }])
+    expect(fake.art).toEqual([{ props: { artFillSource: 3010, artOption: Enums.SuperSourceArtOption.Background }, ss: 0 }])
     expect(sw.getState().mixEffects[0].preview).toBe(ssInput(0))
     expect(fromRaw(sw.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[0].final)
   })

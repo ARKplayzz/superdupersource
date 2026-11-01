@@ -25,28 +25,33 @@ export function area(s: BoxState): number {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
-// Interpolate between two box states so the visible edges move linearly in k.
-// Interpolating crop values directly makes edges drift backwards when size changes too,
-// so we interpolate position, size and the visible rectangle, then solve for crop.
+// Interpolate between two box states by their visible edges, so every edge moves linearly in k and
+// an edge that sits in the same place at both ends stays put the whole way. Size is interpolated
+// too; crop and position are then solved from the edges. The crop needed on each axis is split
+// between the two sides in proportion to how the ends crop them.
 export function lerpBox(a: BoxState, b: BoxState, k: number): BoxState {
   const L = (p: number, q: number) => p + (q - p) * k
-  const size = L(a.size, b.size)
-  const x = L(a.x, b.x)
-  const y = L(a.y, b.y)
   const ra = visibleRect(a)
   const rb = visibleRect(b)
   const l = L(ra.l, rb.l)
   const r = L(ra.r, rb.r)
   const t = L(ra.t, rb.t)
   const bot = L(ra.b, rb.b)
+  const size = Math.max(0.001, L(a.size, b.size))
+  const split = (c1: number, c2: number, total: number): [number, number] => {
+    const sum = c1 + c2
+    return sum > 1e-6 ? [total * (c1 / sum), total * (c2 / sum)] : [total / 2, total / 2]
+  }
+  const [cropL, cropR] = split(L(a.cropL, b.cropL), L(a.cropR, b.cropR), Math.max(0, 32 - (r - l) / size))
+  const [cropT, cropB] = split(L(a.cropT, b.cropT), L(a.cropB, b.cropB), Math.max(0, 18 - (t - bot) / size))
   return {
-    x,
-    y,
+    x: (l + r) / 2 - (size * (cropL - cropR)) / 2,
+    y: (t + bot) / 2 + (size * (cropT - cropB)) / 2,
     size,
-    cropL: clamp((l - (x - 16 * size)) / size, 0, LIMITS.cropLR),
-    cropR: clamp((x + 16 * size - r) / size, 0, LIMITS.cropLR),
-    cropT: clamp((y + 9 * size - t) / size, 0, LIMITS.cropTB),
-    cropB: clamp((bot - (y - 9 * size)) / size, 0, LIMITS.cropTB),
+    cropL: clamp(cropL, 0, LIMITS.cropLR),
+    cropR: clamp(cropR, 0, LIMITS.cropLR),
+    cropT: clamp(cropT, 0, LIMITS.cropTB),
+    cropB: clamp(cropB, 0, LIMITS.cropTB),
   }
 }
 

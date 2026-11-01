@@ -42,6 +42,7 @@ export interface SwitcherInfo {
   superSourceCount: number
   boxCount: number
   macroCount: number
+  mediaPlayers: number
   simulated: boolean
 }
 

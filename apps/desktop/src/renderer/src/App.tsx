@@ -1,82 +1,133 @@
-import { ReactNode, useState } from 'react'
-import iconUrl from '../../../resources/icon-32.png'
+import { useCallback, useEffect, useState } from 'react'
+import { Library } from './Library'
+import { Wizard } from './Wizard'
 import { Design } from './pages/Design'
 import { Setup } from './pages/Setup'
-import { Simulator } from './pages/Simulator'
+import { Sources } from './pages/Sources'
 import { SuperSources } from './pages/SuperSources'
-import { tallyFor } from './shared'
-import { Icon, Toast, useSnapshot } from './ui'
+import { Toast, useSnapshot } from './ui'
 
-export type Tab = 'layouts' | 'design' | 'setup' | 'simulator'
+export type Tab = 'layouts' | 'design' | 'sources' | 'setup'
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'layouts', label: 'SuperSources' },
+  { id: 'design', label: 'Design' },
+  { id: 'sources', label: 'Sources' },
+  { id: 'setup', label: 'Setup' },
+]
+
+const useWidth = () => {
+  const [w, setW] = useState(window.innerWidth)
+  useEffect(() => {
+    const on = () => setW(window.innerWidth)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  return w
+}
 
 export function App() {
   const snap = useSnapshot()
+  const width = useWidth()
   const [tab, setTab] = useState<Tab>('layouts')
   const [editing, setEditing] = useState<string>('slide-10')
   const [toast, setToast] = useState<string | null>(null)
+  const [library, setLibrary] = useState(true)
+  // null follows the window: the Design tab's Library starts hidden when the window is narrow.
+  const [designLib, setDesignLib] = useState<boolean | null>(null)
+  const [closed, setClosed] = useState<Record<string, boolean>>({})
+  const [wizard, setWizard] = useState(false)
+  const [libDragging, setLibDragging] = useState(false)
+  const clearToast = useCallback(() => setToast(null), [])
 
   if (!snap) return null
 
-  const openDesign = (id: string) => {
+  const edit = (id: string) => {
     setEditing(id)
     setTab('design')
   }
+  const toggleGroup = (name: string) => setClosed({ ...closed, [name]: !closed[name] })
+  const designLibShown = designLib ?? width >= 1200
 
-  const rail: { id: Tab; label: string; icon: () => ReactNode }[] = [
-    { id: 'layouts', label: 'SuperSources', icon: Icon.layouts },
-    { id: 'design', label: 'Design', icon: Icon.design },
-    { id: 'setup', label: 'Setup', icon: Icon.setup },
-  ]
+  const c = snap.connection
+  const status = c.status === 'simulator' ? { text: 'Simulator', cls: 'sim' } : c.status === 'connected' ? { text: 'Connected to ATEM', cls: 'ok' } : { text: 'No connection to switcher', cls: 'bad' }
 
   return (
     <div className="shell">
-      <header className="titlebar">
-        <div className="brand">
-          <img src={iconUrl} alt="" />
-          SuperDuperSource <small>.kennedys</small>
-        </div>
-        <div className="status">
-          <span className={`chip ${snap.connection.status === 'simulator' ? 'sim' : snap.connection.status === 'connected' ? 'ok' : 'warn'}`}>
-            <span className="dot" />
-            {snap.connection.status === 'connecting' ? `Connecting to ${snap.connection.address}…` : `${snap.info.model} · ${snap.info.fps} fps`}
-          </span>
-          {snap.slots.map((slot) => {
-            const design = snap.designs.find((d) => d.id === slot.designId)
-            const tally = design ? tallyFor(snap, design.id).tally : 'none'
-            return (
-              <span key={slot.ss} className={`chip ${tally === 'pgm' ? 'pgm' : tally === 'pvw' ? 'pvw' : ''}`} title={`SuperSource ${slot.ss + 1}: ${slot.phase}`}>
-                <span className="dot" />
-                SS{slot.ss + 1} {design ? design.name : 'empty'}
-              </span>
-            )
-          })}
+      <header className="topbar">
+        <nav className="tabs">
+          {TABS.map((t) => (
+            <button key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="topbar-right">
+          <span className={`status ${status.cls}`}>{status.text}</span>
+          {tab === 'layouts' && (
+            <button className={`btn lib-toggle ${library ? 'on' : ''}`} onClick={() => setLibrary(!library)}>
+              Library
+            </button>
+          )}
         </div>
       </header>
 
-      <nav className="rail">
-        {rail.map((r) => (
-          <button key={r.id} className={tab === r.id ? 'active' : ''} onClick={() => setTab(r.id)}>
-            {r.icon()}
-            {r.label}
-          </button>
-        ))}
-        <div className="spacer" />
-        {snap.info.simulated && (
-          <button className={tab === 'simulator' ? 'active' : ''} onClick={() => setTab('simulator')} title="Stand-in for the switcher's multiview and panel">
-            {Icon.monitor()}
-            Simulator
-          </button>
+      <div className="page">
+        {tab === 'layouts' && (
+          <>
+            <SuperSources snap={snap} libraryOpen={library} libDragging={libDragging} onEdit={edit} />
+            {library && (
+              <Library
+                snap={snap}
+                variant="layouts"
+                closed={closed}
+                onToggleGroup={toggleGroup}
+                onHide={() => setLibrary(false)}
+                onNew={() => setWizard(true)}
+                onDragDesign={(id) => setLibDragging(!!id)}
+              />
+            )}
+          </>
         )}
-      </nav>
-
-      <main className="page">
-        {tab === 'layouts' && <SuperSources snap={snap} onEdit={openDesign} onMessage={setToast} />}
-        {tab === 'design' && <Design snap={snap} designId={editing} onSelect={setEditing} onMessage={setToast} />}
+        {tab === 'design' && (
+          <Design
+            snap={snap}
+            designId={editing}
+            onSelect={setEditing}
+            onMessage={setToast}
+            onShowLibrary={() => setDesignLib(true)}
+            library={
+              designLibShown ? (
+                <Library
+                  snap={snap}
+                  variant="design"
+                  editingId={editing}
+                  closed={closed}
+                  onToggleGroup={toggleGroup}
+                  onPick={setEditing}
+                  onHide={() => setDesignLib(false)}
+                  onNew={() => setWizard(true)}
+                />
+              ) : null
+            }
+          />
+        )}
+        {tab === 'sources' && <Sources snap={snap} />}
         {tab === 'setup' && <Setup snap={snap} />}
-        {tab === 'simulator' &&
-          (snap.info.simulated ? <Simulator snap={snap} onMessage={setToast} /> : <SuperSources snap={snap} onEdit={openDesign} onMessage={setToast} />)}
-      </main>
-      <Toast message={toast} onDone={() => setToast(null)} />
+      </div>
+
+      {wizard && (
+        <Wizard
+          snap={snap}
+          onClose={() => setWizard(false)}
+          onCreated={(id) => {
+            setWizard(false)
+            setLibrary(false)
+            edit(id)
+          }}
+        />
+      )}
+      <Toast message={toast} onDone={clearToast} />
     </div>
   )
 }
