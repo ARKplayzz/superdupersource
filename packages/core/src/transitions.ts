@@ -7,9 +7,11 @@ export const DEFAULT_MATCHED_MOTION: Record<Direction, Motion> = {
   out: { delayMs: 0, durationMs: 600, easing: 'easeInOutCubic' },
 }
 
-// Other objects sit in place and are revealed (IN) or covered (OUT) by the matched object,
-// which is always on top. Clean whatever the layout, so it's the safe default.
-export const DEFAULT_OTHER_MOTION: Motion = { placement: 'in-place', delayMs: 0, durationMs: 0, easing: 'linear' }
+// Other objects are pushed: they ride against the matched object's edge, so the boxes move as one
+// (the slides push the presenter off, the presenter pulls the slides in). A box with no edge to
+// push against (it overlaps the matched object both ways) stays in place, revealed or covered by
+// the matched object, which is always on top.
+export const DEFAULT_OTHER_MOTION: Motion = { placement: 'pushed', delayMs: 0, durationMs: 0, easing: 'linear' }
 
 // A pushed box keeps the same side and gap to the matched box as in the final layout.
 export interface Follow {
@@ -29,15 +31,20 @@ export interface Track {
   follow?: Follow
 }
 
-// Which side of the leader the follower sits on in the final layout, and how far away.
-// Null when the boxes overlap both ways, so there's no edge to push against.
+// Boxes are often a few pixels oversized so they cover a template's outline, which makes
+// neighbours overlap slightly. Overlaps up to this much (15 px at 1080) still count as touching.
+const TOUCH_TOLERANCE = 0.25
+
+// Which side of the leader the follower sits on in the final layout, and how far away (negative
+// when they overlap slightly). Null when the boxes overlap properly both ways, so there's no edge
+// to push against.
 export function followRelation(leader: BoxState, follower: BoxState): Omit<Follow, 'final'> | null {
   const l = visibleRect(leader)
   const f = visibleRect(follower)
-  if (f.l >= l.r - 0.01) return { side: 'right', gap: f.l - l.r }
-  if (f.r <= l.l + 0.01) return { side: 'left', gap: l.l - f.r }
-  if (f.b >= l.t - 0.01) return { side: 'above', gap: f.b - l.t }
-  if (f.t <= l.b + 0.01) return { side: 'below', gap: l.b - f.t }
+  if (f.l >= l.r - TOUCH_TOLERANCE) return { side: 'right', gap: f.l - l.r }
+  if (f.r <= l.l + TOUCH_TOLERANCE) return { side: 'left', gap: l.l - f.r }
+  if (f.b >= l.t - TOUCH_TOLERANCE) return { side: 'above', gap: f.b - l.t }
+  if (f.t <= l.b + TOUCH_TOLERANCE) return { side: 'below', gap: l.b - f.t }
   return null
 }
 

@@ -217,7 +217,7 @@ For every design and every object that can be matched, the app generates:
 
 and assigns box numbers so the full-screen object is box 1. Slide 10 gets four transitions: IN from camera, IN from slides, OUT to camera, OUT to slides.
 
-Each of these is designed on its own. OUT to camera doesn't have to be IN from camera played backwards: it can use different timing, easing and paths for the other boxes. The designer starts each new transition from a sensible default (the reverse of the matching IN, or slide off the nearest edge) so you only edit the ones you care about.
+Each of these is designed on its own. OUT to camera doesn't have to be IN from camera played backwards: it can use different timing, easing and paths for the other boxes. The designer starts each new transition from a default (the reverse of the matching IN if that was customised, otherwise the other boxes are pushed by the full-screen one) so you only edit the ones you care about.
 
 ---
 
@@ -275,6 +275,7 @@ Small, resizable window (about 1100×700, minimum 960×600). Icon rail on the le
 - **Motion,** per object, within the selected transition:
   - The matched object's start (IN) or end (OUT) is fixed at full screen.
   - Every other object: offscreen left/right/top/bottom, scale from centre, crop wipe from an edge, already in place, or **pushed**: it rides against the full-screen box's edge with its final gap, on that box's timing, so the slides push the presenter off and pull it back in. Added 31 Oct 2026 with a *Slides + presenter (push)* copy of Slide 10 that uses it in all four transitions.
+  - **Pushed is the default** (since 1 Nov 2026) for any box without its own motion. Boxes that overlap by up to 0.25 units (15 px, the bleed used to cover template outlines) still count as touching. A box that overlaps the full-screen box properly both ways has no edge to push against and stays in place. The original *Slides + presenter* keeps its custom motions (presenter revealed, slides sliding in).
   - Duration, delay (for staggering), easing (presets plus a curve editor).
 - **Timeline:** one track per object, so the stagger is visible.
 - **Test on preview** (§7).

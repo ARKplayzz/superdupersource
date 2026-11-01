@@ -101,10 +101,10 @@ describe('transitions', () => {
     expect(motion).toEqual({ placement: 'offscreen-right', durationMs: 600, delayMs: 0, easing: 'easeInCubic' })
   })
 
-  test('no custom motion falls back to reveal in place', () => {
+  test('no custom motion means pushed', () => {
     const { motion, origin } = motionFor(byId('slide-11'), 'in', 'B', 'A')
     expect(origin).toBe('default')
-    expect(motion.placement).toBe('in-place')
+    expect(motion.placement).toBe('pushed')
   })
 })
 
@@ -138,6 +138,14 @@ describe('pushed boxes', () => {
   test('a pushed box takes the full-screen box timing', () => {
     const rt = resolveTransition(SLIDE_10_PUSH, 'out', 'A')
     expect(rt.tracks[1].motion).toMatchObject({ placement: 'pushed', durationMs: 600, delayMs: 0 })
+  })
+
+  test('a few pixels of overlap (boxes covering a template outline) still count as touching', () => {
+    // Four up's rows overlap by 0.05 units so the boxes cover the outline between them.
+    const rt = resolveTransition(byId('slide-04'), 'in', 'A')
+    const wide = rt.tracks.find((t) => t.objectId === 'C')!
+    expect(wide.follow).toMatchObject({ side: 'below' })
+    expect(wide.follow!.gap).toBeCloseTo(-0.05, 6)
   })
 
   test('boxes that overlap both ways fall back to in place', () => {

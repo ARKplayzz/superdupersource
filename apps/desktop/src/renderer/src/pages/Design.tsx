@@ -573,8 +573,8 @@ export function Design({ snap, designId, onSelect, onMessage }: { snap: AppSnaps
                           edge, using its timing.
                         </p>
                       ) : !matched && t.motion.placement === 'pushed' ? (
-                        <p className="small-text warn-text">
-                          Can't be pushed: it overlaps {objectName(design, resolved.matchedId)} both ways in the layout, so there's no edge to push against. It stays in place.
+                        <p className={`small-text ${t.origin === 'custom' ? 'warn-text' : 'muted'}`}>
+                          Stays in place: it overlaps {objectName(design, resolved.matchedId)} both ways in the layout, so there's no edge to push against.
                         </p>
                       ) : null}
                       {!t.follow && (
