@@ -12,6 +12,10 @@ class FakeAtem extends EventEmitter implements AtemLike {
   sent: { t: number; commands: Commands.ISerializableCommand[] }[] = []
   art: { props: object; ss?: number }[] = []
 
+  // Every command is also serialised the way atem-connection does before it goes on the wire,
+  // at this protocol version, so a command that wouldn't encode fails the test.
+  protocol = Enums.ProtocolVersion.V8_1_1
+
   constructor(private readonly clock: FrameClock) {
     super()
     const s = this.state as any
@@ -50,6 +54,7 @@ class FakeAtem extends EventEmitter implements AtemLike {
   async destroy() {}
 
   async sendCommands(commands: Commands.ISerializableCommand[]) {
+    for (const c of commands) c.serialize(this.protocol)
     this.sent.push({ t: this.clock.now(), commands })
     const paths: string[] = []
     for (const c of commands) {
@@ -73,6 +78,30 @@ class FakeAtem extends EventEmitter implements AtemLike {
     this.art.push({ props, ss })
     Object.assign(AtemStateUtil.getSuperSource(this.state, ss).properties!, props)
     this.emit('stateChanged', this.state, [`video.superSources.${ss}.properties`])
+  }
+}
+
+// A 4 M/E Constellation 4K: four M/Es, two SuperSources, 20 cameras, on protocol 9.
+class FakeConstellation extends FakeAtem {
+  constructor(clock: FrameClock) {
+    super(clock)
+    this.protocol = Enums.ProtocolVersion.V9_6
+    const s = this.state as any
+    s.info.productIdentifier = 'ATEM 4 M/E Constellation 4K'
+    s.info.model = Enums.Model.Constellation4K4ME
+    s.info.capabilities = { mixEffects: 4, superSources: 2, mediaPlayers: 4, DVEs: 4 }
+    s.info.superSources = [{ boxCount: 4 }, { boxCount: 4 }]
+    for (let i = 1; i <= 20; i++) s.inputs[i] = { inputId: i, shortName: `CAM${i}`, longName: `Camera ${i}`, internalPortType: Enums.InternalPortType.External }
+    s.inputs[6001] = { inputId: 6001, shortName: 'SSC2', longName: 'Super Source 2', internalPortType: Enums.InternalPortType.SuperSource }
+    for (const m of [2, 3]) s.inputs[10010 + m * 10] = { inputId: 10010 + m * 10, shortName: `M${m + 1}PG`, longName: `ME ${m + 1} PGM`, internalPortType: Enums.InternalPortType.MEOutput }
+    for (const i of [0, 1, 2, 3]) {
+      const me = AtemStateUtil.getMixEffect(this.state, i)
+      me.programInput = DEFAULT_SETTINGS.roles.Static // the presenter camera, with the default sources
+      me.previewInput = DEFAULT_SETTINGS.roles.Presentation
+    }
+    const ss2 = AtemStateUtil.getSuperSource(this.state, 1)
+    for (const i of [0, 1, 2, 3]) AtemStateUtil.getSuperSourceBox(ss2, i)
+    ss2.properties = { ...AtemStateUtil.getSuperSource(this.state, 0).properties! }
   }
 }
 
@@ -213,3 +242,36 @@ describe('AtemSwitcher', () => {
     expect(late[Math.floor(late.length * 0.95)]).toBeLessThan(4)
   })
 })
+
+describe('4 M/E Constellation 4K', () => {
+  async function constellation() {
+    const clock = virtualClock()
+    const fake = new FakeConstellation(clock)
+    const sw = new AtemSwitcher('192.168.10.240', { atem: fake, clock })
+    sw.connect()
+    await new Promise((r) => setTimeout(r, 5))
+    return { clock, fake, sw }
+  }
+
+  test('reads four M/Es and two SuperSources', async () => {
+    const { sw } = await constellation()
+    expect(sw.info).toMatchObject({ meCount: 4, superSourceCount: 2, boxCount: 4 })
+    expect(sw.getState().inputs[6001]).toMatchObject({ kind: 'supersource', ss: 1 })
+  })
+
+  test('an SS CUT with the default sources animates in from the camera on program', async () => {
+    const { sw, fake } = await constellation()
+    const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
+    await engine.load('slide-10-push')
+    expect(engine.nextTake()).toMatchObject({ action: 'in', match: { kind: 'match', objectId: 'B' } })
+    fake.sent = []
+    await engine.take({ fallback: 'cut' })
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', transition: 'in:B' })
+    // Frame 0 is the snap, frame 1 the cut, then the boxes move for the rest.
+    expect(fake.sent[1].commands.map((c) => c.constructor.name)).toEqual(['CutCommand'])
+    expect(fake.sent.length).toBeGreaterThan(30)
+    expect(fake.sent.slice(2).every((b) => b.commands.every((c) => c instanceof Commands.SuperSourceBoxParametersCommand))).toBe(true)
+    expect(sw.getState().mixEffects[0].program).toBe(ssInput(0))
+  })
+})
+
