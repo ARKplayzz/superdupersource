@@ -3,7 +3,7 @@ import { AppConnection } from './connection.js'
 import { actions, feedbacks, presets, signature, variableDefinitions, variableValues } from './definitions.js'
 import { DEFAULT_PORT, type ModuleConfig, type ModuleTypes } from './types.js'
 
-const VERSION = '0.1.4'
+const VERSION = '0.1.5'
 
 // Companion module for SuperDuperSource. It talks to the app, not the switcher: the app owns
 // timing and state, and this module is a remote with tally.

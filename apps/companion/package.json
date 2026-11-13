@@ -1,6 +1,6 @@
 {
   "name": "companion-module-kennedys-superdupersource",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Bitfocus Companion module for SuperDuperSource: load layouts and run animated SuperSource takes",
   "license": "MIT",
   "main": "dist/main.js",
