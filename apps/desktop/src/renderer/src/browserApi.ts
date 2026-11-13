@@ -1,4 +1,4 @@
-import { Design, Engine, SavedShow, ShowSettings, SimSwitcher, freshShow, upgradeShow } from '@sds/core/browser'
+import { Design, Engine, SavedShow, ShowSettings, SimSwitcher, TransitionKey, freshShow, upgradeShow } from '@sds/core/browser'
 import type { AppSnapshot, Result, SdsApi } from '../../shared/api'
 
 // The same API the Electron preload provides, running entirely in the page: simulator + engine,
@@ -90,6 +90,13 @@ export function createBrowserApi(): SdsApi {
     },
     load: (id) => ok(() => engine.load(id)),
     take: () => engine.take(),
+    rehearse: async (id, key) => {
+      try {
+        return { ok: true, ...(await engine.rehearse(id, key as TransitionKey)) }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    },
     saveDesign: async (d) => {
       const i = show.designs.findIndex((x) => x.id === d.id)
       if (i >= 0) show.designs[i] = d

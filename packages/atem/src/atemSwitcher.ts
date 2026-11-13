@@ -18,6 +18,7 @@ export interface AtemLike {
   destroy(): Promise<void>
   sendCommands(commands: Commands.ISerializableCommand[]): Promise<void>
   setSuperSourceProperties(props: { artFillSource?: number; artOption?: Enums.SuperSourceArtOption }, ssrcId?: number): Promise<void>
+  uploadMacro(index: number, name: string, data: Buffer): Promise<void>
 }
 
 export interface FrameClock {
@@ -84,6 +85,22 @@ export class AtemSwitcher extends Emitter implements Switcher {
 
   getState(): SwitcherState {
     return this.state
+  }
+
+  // Writes a take macro into a slot without running it (atem-connection's data transfer, the same
+  // way ATEM Software Control restores macros). The ops are the V2 SuperSource ones, so it needs
+  // protocol 8.0 or later. Resolves once the switcher lists the macro under its new name.
+  async uploadMacro(index: number, name: string, bytes: Uint8Array): Promise<void> {
+    if (this.status !== 'connected') throw new Error(`Not connected to the switcher at ${this.address}`)
+    const version = this.atem.state?.info.apiVersion ?? 0
+    if (version < Enums.ProtocolVersion.V8_0) throw new Error("This switcher's firmware is too old for take macros")
+    if (index >= this.info.macroCount) throw new Error(`The switcher has no macro ${index + 1}`)
+    await this.atem.uploadMacro(index, name, Buffer.from(bytes))
+    const until = this.clock.now() + 3000
+    while (this.state.macros[index] !== name) {
+      if (this.clock.now() > until) throw new Error(`Macro ${index + 1} didn't show up on the switcher after writing it`)
+      await new Promise((r) => setTimeout(r, 20))
+    }
   }
 
   get busy(): boolean {
@@ -155,6 +172,9 @@ export class AtemSwitcher extends Emitter implements Switcher {
           break
         case 'preview':
           batch.push(new Commands.PreviewInputCommand(op.me, op.input))
+          break
+        case 'macro':
+          batch.push(new Commands.MacroActionCommand(op.index, Enums.MacroAction.Run))
           break
         case 'art':
           // Its command differs by protocol version; atem-connection picks the right one.

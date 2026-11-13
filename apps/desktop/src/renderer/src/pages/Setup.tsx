@@ -63,6 +63,42 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
             </select>
           </div>
           <CheckRow label="Animate when keys are on air" on={s.animateWithKeysOnAir} onChange={(on) => set({ animateWithKeysOnAir: on })} />
+          <CheckRow label="Run takes as switcher macros" on={s.macros.enabled} onChange={(on) => set({ macros: { ...s.macros, enabled: on } })} />
+          {s.macros.enabled && (
+            <>
+              <div className="row setting">
+                <span className="grow two-line">
+                  <span>Macro slots</span>
+                  <span className="small muted">Slots holding other macros are left alone</span>
+                </span>
+                <MacroNumber value={s.macros.first} onChange={(first) => set({ macros: { ...s.macros, first } })} />
+                <span className="muted">to</span>
+                <MacroNumber value={s.macros.last} onChange={(last) => set({ macros: { ...s.macros, last } })} />
+              </div>
+              <div className="row setting">
+                <span className="grow">If a take's macro isn't on the switcher</span>
+                <select className="setting-select" value={s.macros.fallback} onChange={(e) => set({ macros: { ...s.macros, fallback: e.target.value as 'cut' | 'stream' } })}>
+                  <option value="cut">Cut without animating</option>
+                  <option value="stream">Stream it from this PC</option>
+                </select>
+              </div>
+              {snap.slots
+                .filter((slot) => slot.designId)
+                .map((slot) => (
+                  <div key={slot.ss} className="row setting">
+                    <span className="grow two-line">
+                      <span>
+                        SuperSource {slot.ss + 1}: {snap.designs.find((d) => d.id === slot.designId)?.name}
+                      </span>
+                      {slot.macros.problem && <span className="small bad-text">{slot.macros.problem}</span>}
+                    </span>
+                    <span className={slot.macros.ready === slot.macros.total && slot.macros.total > 0 ? 'ok-text' : 'muted'}>
+                      {slot.macros.writing ? `Writing macros, ${slot.macros.ready} of ${slot.macros.total}` : `${slot.macros.ready} of ${slot.macros.total} takes on the switcher`}
+                    </span>
+                  </div>
+                ))}
+            </>
+          )}
         </div>
 
         <h3 className="col-title">Companion</h3>
@@ -145,6 +181,27 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
 }
 
 const KIND: Record<TakeRecord['kind'], string> = { animated: 'Animated', plain: 'No animation', elsewhere: 'Switcher take' }
+const VIA = { macro: 'as a macro', stream: 'streamed' }
+
+// A macro slot number, as ATEM Software Control numbers them (from 1). Applied on Enter or leaving the field.
+function MacroNumber({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <input
+      type="number"
+      className="macro-slot"
+      min={1}
+      max={1000}
+      defaultValue={value}
+      key={value}
+      onBlur={(e) => {
+        const v = Math.round(Number(e.target.value))
+        if (v >= 1 && v !== value) onChange(v)
+        else e.target.value = String(value)
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
+  )
+}
 
 // One take: when, which layout and which way, whether it animated, and why not.
 function TakeRow({ take, name }: { take: TakeRecord; name: string }) {
@@ -157,7 +214,7 @@ function TakeRow({ take, name }: { take: TakeRecord; name: string }) {
         </span>
         <span className="small muted">{take.detail}</span>
       </span>
-      <span className={take.kind === 'animated' ? 'ok-text' : 'muted'}>{take.kind === 'animated' ? `${KIND.animated}, ${take.frames} frames` : KIND[take.kind]}</span>
+      <span className={take.kind === 'animated' ? 'ok-text' : 'muted'}>{take.kind === 'animated' ? `${KIND.animated} ${take.via ? VIA[take.via] : ''}, ${take.frames} frames` : KIND[take.kind]}</span>
     </div>
   )
 }

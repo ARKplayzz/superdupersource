@@ -33,6 +33,8 @@ export interface SwitcherState {
   superSources: SuperSourceState[]
   auxes: number[]
   inputs: Record<number, InputInfo>
+  // Macro slots in use, by 0-based index, with their names.
+  macros: Record<number, string>
 }
 
 export interface SwitcherInfo {
@@ -54,6 +56,7 @@ export type Op =
   | { op: 'auto'; me: number } // the M/E's own mix, at its transition rate
   | { op: 'preview'; me: number; input: number }
   | { op: 'art'; ss: number; fill: number; behind: boolean }
+  | { op: 'macro'; index: number } // run a macro stored on the switcher (0-based slot)
 
 export interface Switcher {
   readonly info: SwitcherInfo
@@ -61,6 +64,8 @@ export interface Switcher {
   // Runs ops on the switcher's frame clock. Resolves when the last op has run.
   run(ops: Op[]): Promise<void>
   readonly busy: boolean
+  // Writes a macro into a slot without running it. Missing when the switcher can't take macros.
+  uploadMacro?(index: number, name: string, bytes: Uint8Array): Promise<void>
   on(event: 'state', listener: (state: SwitcherState) => void): void
   off(event: 'state', listener: (state: SwitcherState) => void): void
 }

@@ -1,4 +1,5 @@
 import { Emitter } from './emitter'
+import { decodeMacro } from './macro'
 import { InputInfo, Op, SuperSourceState, Switcher, SwitcherInfo, SwitcherState, meProgramInput, ssInput } from './switcher'
 import type { BoxRaw } from './units'
 
@@ -38,6 +39,10 @@ export class SimSwitcher extends Emitter implements Switcher {
   private waitFrames = 0
   private timer: ReturnType<typeof setInterval> | null = null
   private mixing = new Map<number, number>() // me -> frames left in an auto transition
+  // Macros stored on the "switcher", as written, and the one playing (it runs on its own, like the
+  // switcher's macro player, alongside whatever the PC sends).
+  private macroBytes = new Map<number, Uint8Array>()
+  private player: { ops: Op[]; wait: number } | null = null
   private readonly mixFrames: number
   frame = 0
 
@@ -75,6 +80,7 @@ export class SimSwitcher extends Emitter implements Switcher {
       })),
       auxes: [1],
       inputs,
+      macros: {},
     }
   }
 
@@ -126,7 +132,44 @@ export class SimSwitcher extends Emitter implements Switcher {
     }
     if (this.waitFrames > 0) this.waitFrames--
     if (this.waitFrames === 0) this.process()
+    if (this.player) {
+      if (this.player.wait > 0) this.player.wait--
+      if (this.player.wait === 0) this.play()
+    }
     this.emit('frame', this.frame)
+  }
+
+  get playingMacro(): boolean {
+    return this.player !== null
+  }
+
+  // Stores the bytes as the switcher would. Throws on bytes it couldn't run.
+  async uploadMacro(index: number, name: string, bytes: Uint8Array): Promise<void> {
+    if (index < 0 || index >= this.info.macroCount) throw new Error(`No macro slot ${index + 1}`)
+    decodeMacro(bytes)
+    this.macroBytes.set(index, bytes)
+    this.state = { ...this.state, macros: { ...this.state.macros, [index]: name } }
+    this.changed()
+  }
+
+  // The macro player: everything up to a wait runs in this frame.
+  private play(): void {
+    const p = this.player
+    if (!p) return
+    let changed = false
+    while (p.wait === 0) {
+      const op = p.ops.shift()
+      if (!op) {
+        this.player = null
+        break
+      }
+      if (op.op === 'wait') p.wait = op.frames
+      else {
+        this.apply(op)
+        changed = true
+      }
+    }
+    if (changed) this.changed()
   }
 
   // Panel-style controls, so the UI can play the operator and test bypass takes.
@@ -208,6 +251,13 @@ export class SimSwitcher extends Emitter implements Switcher {
       case 'art': {
         const superSources = this.state.superSources.map((s, i) => (i === op.ss ? { ...s, artFill: op.fill, artBehind: op.behind } : s))
         this.state = { ...this.state, superSources }
+        break
+      }
+      case 'macro': {
+        const bytes = this.macroBytes.get(op.index)
+        if (!bytes) break // an empty slot does nothing, as on a switcher
+        this.player = { ops: decodeMacro(bytes), wait: 0 }
+        this.play()
         break
       }
     }

@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import { Engine } from './engine'
+import { decodeMacro, encodeMacro } from './macro'
 import { lerpBox, offscreen, visibleRect } from './geometry'
 import { GROUP_GRID, GROUP_PRES, SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, fingerprint, freshShow, mergeNewStarters, migrateShow, upgradeShow } from './library'
 import { findMatch, resolveSource } from './matching'
 import { DEFAULT_SETTINGS, ShowSettings } from './model'
 import { planIn, planOut } from './plan'
 import { SimSwitcher } from './sim'
-import { designTally, isOnAir, meProgramInput, ssInput } from './switcher'
+import { Op, designTally, isOnAir, meProgramInput, ssInput } from './switcher'
 import { buildFrames, motionFor, resolveTransition, statesAt } from './transitions'
 import { FULLSCREEN, fromRaw, toRaw } from './units'
 
@@ -538,5 +539,106 @@ describe('updating a saved show', () => {
     expect(show.designs.find((d) => d.id === 'slide-02')!.name).toBe('Interview')
     expect(show.starterPrints['slide-02']).toBeUndefined()
     expect(show.starterPrints['slide-04']).toBe(fingerprint(byId('slide-04')))
+  })
+})
+
+describe('switcher macros', () => {
+  const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join('-')
+  const box = (props: Record<string, number | boolean>) => encodeMacro([{ op: 'box', ss: 0, box: 0, props }])
+
+  test('ops encode to the bytes a real switcher recorded (LibAtem test fixtures)', () => {
+    // From LibAtem.XmlState.Test/TestMacroFiles/ssrc-v2.macros (ATEM 2 M/E Production Studio 4K).
+    expect(hex(box({ enabled: true }))).toBe('0C-00-A0-01-00-00-00-00-01-00-00-00')
+    expect(hex(box({ x: -533 }))).toBe('0C-00-A2-01-00-00-00-00-85-AB-FA-FF') // xPosition -5.33
+    expect(hex(box({ size: 686 }))).toBe('0C-00-A4-01-00-00-00-00-9E-AF-00-00') // size 0.686
+    expect(hex(box({ cropLeft: 8225 }))).toBe('0C-00-A8-01-00-00-00-00-9A-39-08-00') // left 8.225
+    // From macros1-v8.macros: a 14 frame sleep and a cut on M/E 1.
+    expect(hex(encodeMacro([{ op: 'wait', frames: 14 }]))).toBe('08-00-07-00-0E-00-00-00')
+    expect(hex(encodeMacro([{ op: 'cut', me: 0 }]))).toBe('08-00-04-00-00-00-00-00')
+  })
+
+  test('a take macro decodes back to the same take, minus repeats', () => {
+    const ctx = { ss: 1, me: 1, fps: 50, boxCount: 4, sources: { A: SLIDES, B: CAM } }
+    const plan = planIn(SLIDE_10, 'B', ctx)
+    const decoded = decodeMacro(encodeMacro(plan.ops))
+    expect(decoded.filter((o) => o.op === 'cut')).toEqual([{ op: 'cut', me: 1 }])
+    expect(decoded.filter((o) => o.op === 'wait').length).toBe(plan.ops.filter((o) => o.op === 'wait').length)
+    expect(decoded.every((o) => o.op !== 'box' || o.ss === 1)).toBe(true)
+    // Played on a simulator, the macro lands exactly where the streamed take would.
+    const viaMacro = new SimSwitcher({ superSourceCount: 2 })
+    const streamed = new SimSwitcher({ superSourceCount: 2 })
+    void viaMacro.run(decoded)
+    void streamed.run(plan.ops)
+    for (let i = 0; i < 100; i++) (viaMacro.tick(), streamed.tick())
+    expect(viaMacro.getState().superSources).toEqual(streamed.getState().superSources)
+  })
+
+  test('a load writes the layout’s takes, and SS CUT runs the macro on the switcher', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, Promise.resolve())
+    expect(engine.slots[0].macros).toMatchObject({ ready: 4, total: 4, problem: null })
+    expect(Object.values(s.getState().macros).sort()).toEqual(expect.arrayContaining([expect.stringMatching(/^SDS1 in:B [0-9a-f]{8}$/)]))
+    expect(Object.keys(s.getState().macros).map(Number)).toEqual([79, 80, 81, 82]) // slots 80 to 83
+
+    const sent: Op[][] = []
+    const run = s.run.bind(s)
+    s.run = (ops: Op[]) => (sent.push(ops), run(ops))
+    await drive(s, engine.take())
+    expect(sent[0][0]).toEqual({ op: 'macro', index: 80 }) // in:B is the second take of SS1
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'macro', transition: 'in:B' })
+    expect(s.getState().mixEffects[0].program).toBe(ssInput(0))
+    // On air in final form, with the presenter (the matched box) in box 1.
+    expect(fromRaw(s.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[1].final)
+  })
+
+  test('a macro of yours in the range is never overwritten, and that take cuts instead', async () => {
+    const s = sim()
+    await s.uploadMacro(80, 'Lower third', encodeMacro([{ op: 'wait', frames: 1 }]))
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, Promise.resolve())
+    expect(s.getState().macros[80]).toBe('Lower third')
+    expect(engine.slots[0].macros.problem).toMatch(/Macro 81 holds "Lower third"/)
+    await drive(s, engine.take())
+    expect(engine.log[0]).toMatchObject({ kind: 'plain', transition: undefined })
+    expect(engine.log[0].detail).toMatch(/macro isn't on the switcher/)
+  })
+
+  test('with streaming allowed as the fallback, a take without its macro streams', async () => {
+    const s = sim()
+    await s.uploadMacro(80, 'Lower third', encodeMacro([{ op: 'wait', frames: 1 }]))
+    const engine = new Engine(s, { ...settings, macros: { ...settings.macros, fallback: 'stream' } }, DESIGNS)
+    s.setProgram(0, CAM)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, engine.take())
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'stream' })
+  })
+
+  test('saving a change to a loaded layout rewrites its macros', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, Promise.resolve())
+    const before = s.getState().macros[80]
+    const slower = { ...SLIDE_10, transitions: { ...SLIDE_10.transitions, 'in:B': { ...SLIDE_10.transitions['in:B']!, B: { delayMs: 0, durationMs: 1000, easing: 'linear' as const } } } }
+    engine.setDesigns([slower, ...STARTER_DESIGNS])
+    await drive(s, new Promise((r) => setTimeout(r, 10)))
+    expect(s.getState().macros[80]).not.toBe(before)
+    expect(engine.slots[0].macros).toMatchObject({ ready: 4, writing: false })
+  })
+
+  test('Test on preview plays the take without cutting', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    const res = await drive(s, engine.rehearse('slide-10', 'in:B'))
+    expect(res.via).toBe('macro')
+    expect(s.getState().macros[98]).toBe('SDS test') // slot 99
+    expect(s.getState().mixEffects[0]).toMatchObject({ program: CAM, preview: ssInput(0) })
+    expect(fromRaw(s.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[1].final)
   })
 })

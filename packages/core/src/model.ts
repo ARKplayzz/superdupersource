@@ -67,6 +67,10 @@ export interface ShowSettings {
   localApi: { port: number; allowRemote: boolean }
   // Which switcher the app drives.
   connection: { mode: 'simulator' | 'atem'; address: string }
+  // Takes as switcher macros: each layout's takes are written into these slots (numbered from 1,
+  // as ATEM Software Control shows them) and run on the switcher. `fallback` is what a take does
+  // when its macro isn't on the switcher: stream it from this PC, or cut without animating.
+  macros: { enabled: boolean; first: number; last: number; fallback: 'stream' | 'cut' }
 }
 
 export const DEFAULT_SETTINGS: ShowSettings = {
@@ -90,6 +94,7 @@ export const DEFAULT_SETTINGS: ShowSettings = {
   localApi: { port: 8710, allowRemote: false },
   // A new install waits for a switcher address. The simulator is under Setup, Debug.
   connection: { mode: 'atem', address: '' },
+  macros: { enabled: true, first: 80, last: 99, fallback: 'cut' },
 }
 
 // The background a design's art fill comes from.

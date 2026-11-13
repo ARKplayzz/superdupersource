@@ -114,6 +114,7 @@ export function Design({
   const [boxDrag, setBoxDrag] = useState<number | null>(null)
   const [boxOver, setBoxOver] = useState<number | null>(null)
   const [canvasW, setCanvasW] = useState(0)
+  const [testing, setTesting] = useState(false)
   const [, setImgTick] = useState(0)
   const drag = useRef<Drag | null>(null)
   const canvas = useRef<HTMLDivElement | null>(null)
@@ -542,6 +543,20 @@ export function Design({
             <span className="muted num anim-time">
               {Math.round(Math.min(time, total))} / {resolved ? durationMs(resolved) : 0} ms
             </span>
+            <button
+              className="btn"
+              disabled={!key || dirty || testing}
+              title={dirty ? 'Save the layout first: the test plays the saved version' : 'Plays this take on the switcher while the layout is only on preview'}
+              onClick={async () => {
+                if (!key) return
+                setTesting(true)
+                const res = await window.sds.rehearse(design.id, key)
+                setTesting(false)
+                onMessage(res.ok ? `Played ${transitionLabel(design, key)} on preview, ${res.via === 'macro' ? 'as a switcher macro' : 'streamed from this PC'}` : res.error)
+              }}
+            >
+              {testing ? 'Testing…' : 'Test on preview'}
+            </button>
           </div>
           <div className="anim-grid anim-head">
             <span>Box</span>

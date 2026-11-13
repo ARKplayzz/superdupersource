@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { AtemState, AtemStateUtil, Commands, Enums } from 'atem-connection'
 import { describe, expect, test } from 'vitest'
-import { DEFAULT_SETTINGS, Engine, SLIDE_10, STARTER_DESIGNS, fromRaw, ssInput } from '@sds/core'
+import { DEFAULT_SETTINGS, Engine, Op, SLIDE_10, STARTER_DESIGNS, decodeMacro, fromRaw, ssInput } from '@sds/core'
 import { AtemSwitcher, type AtemLike, type FrameClock } from './atemSwitcher'
 import { mapInfo, mapState } from './mapping'
 
@@ -11,6 +11,7 @@ class FakeAtem extends EventEmitter implements AtemLike {
   state: AtemState = AtemStateUtil.Create()
   sent: { t: number; commands: Commands.ISerializableCommand[] }[] = []
   art: { props: object; ss?: number }[] = []
+  macros = new Map<number, Buffer>()
 
   // Every command is also serialised the way atem-connection does before it goes on the wire,
   // at this protocol version, so a command that wouldn't encode fails the test.
@@ -48,7 +49,32 @@ class FakeAtem extends EventEmitter implements AtemLike {
   }
 
   async connect() {
+    ;(this.state as any).info.apiVersion = this.protocol
     setTimeout(() => this.emit('connected'), 0)
+  }
+
+  // Stores the bytes in the macro pool, the way the switcher reports an upload back.
+  async uploadMacro(index: number, name: string, data: Buffer) {
+    decodeMacro(data) // the switcher would refuse bytes that don't parse
+    this.macros.set(index, data)
+    ;(this.state.macro.macroProperties as any)[index] = { isUsed: true, hasUnsupportedOps: false, name, description: '' }
+    setTimeout(() => this.emit('stateChanged', this.state, [`macro.macroProperties.${index}`]), 1)
+  }
+
+  // Running a macro applies its ops as the switcher would, all at once (timing isn't modelled here).
+  private runMacro(index: number, paths: string[]) {
+    const data = this.macros.get(index)
+    if (!data) return
+    for (const op of decodeMacro(data) as Op[]) {
+      if (op.op === 'cut') {
+        const me = AtemStateUtil.getMixEffect(this.state, op.me)
+        ;[me.programInput, me.previewInput] = [me.previewInput, me.programInput]
+        paths.push(`video.mixEffects.${op.me}`)
+      } else if (op.op === 'box') {
+        Object.assign(AtemStateUtil.getSuperSourceBox(AtemStateUtil.getSuperSource(this.state, op.ss), op.box), op.props)
+        paths.push(`video.superSources.${op.ss}.boxes.${op.box}`)
+      }
+    }
   }
   async disconnect() {}
   async destroy() {}
@@ -65,6 +91,8 @@ class FakeAtem extends EventEmitter implements AtemLike {
       } else if (c instanceof Commands.PreviewInputCommand) {
         AtemStateUtil.getMixEffect(this.state, c.mixEffect).previewInput = c.properties.source
         paths.push(`video.mixEffects.${c.mixEffect}`)
+      } else if (c instanceof Commands.MacroActionCommand && c.properties.action === Enums.MacroAction.Run) {
+        this.runMacro(c.index, paths)
       } else if (c instanceof Commands.SuperSourceBoxParametersCommand) {
         const box = AtemStateUtil.getSuperSourceBox(AtemStateUtil.getSuperSource(this.state, c.ssrcId), c.boxId)
         Object.assign(box, c.properties)
@@ -131,6 +159,8 @@ async function connected() {
 
 // The fake switcher has the presenter camera on input 1 and the slides on 2.
 const VENUE = { ...DEFAULT_SETTINGS, roles: { ...DEFAULT_SETTINGS.roles, Static: 1, Presentation: 2, Wide: 3 } }
+// Takes streamed from the PC, for the tests of streaming itself.
+const STREAMED = { ...VENUE, macros: { ...VENUE.macros, enabled: false } }
 
 describe('mapping', () => {
   test('info comes from the switcher, not assumptions', () => {
@@ -186,7 +216,7 @@ describe('AtemSwitcher', () => {
 
   test('an animated take streams one batch per frame, 20 ms apart at 1080p50', async () => {
     const { sw, fake, clock } = await connected()
-    const engine = new Engine(sw, VENUE, [SLIDE_10, ...STARTER_DESIGNS])
+    const engine = new Engine(sw, STREAMED, [SLIDE_10, ...STARTER_DESIGNS])
     await engine.load('slide-10')
     fake.sent = []
     const t0 = clock.now()
@@ -211,7 +241,7 @@ describe('AtemSwitcher', () => {
 
   test('OUT ends with a cut to the source on preview, then restores the layout', async () => {
     const { sw, fake } = await connected()
-    const engine = new Engine(sw, VENUE, [SLIDE_10, ...STARTER_DESIGNS])
+    const engine = new Engine(sw, STREAMED, [SLIDE_10, ...STARTER_DESIGNS])
     await engine.load('slide-10')
     await engine.take()
     await fake.sendCommands([new Commands.PreviewInputCommand(0, 2)]) // operator puts the slides on preview
@@ -243,6 +273,12 @@ describe('AtemSwitcher', () => {
   })
 })
 
+// Until a SuperSource's take macros have all been written.
+async function written(engine: Engine, ss: number) {
+  await new Promise((r) => setTimeout(r, 5))
+  for (let i = 0; i < 300 && engine.slots[ss].macros.writing; i++) await new Promise((r) => setTimeout(r, 10))
+}
+
 describe('4 M/E Constellation 4K', () => {
   async function constellation() {
     const clock = virtualClock()
@@ -259,19 +295,47 @@ describe('4 M/E Constellation 4K', () => {
     expect(sw.getState().inputs[6001]).toMatchObject({ kind: 'supersource', ss: 1 })
   })
 
-  test('an SS CUT with the default sources animates in from the camera on program', async () => {
+  test('streamed: an SS CUT with the default sources snaps, cuts, then moves the boxes', async () => {
     const { sw, fake } = await constellation()
-    const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
+    const engine = new Engine(sw, { ...DEFAULT_SETTINGS, macros: { ...DEFAULT_SETTINGS.macros, enabled: false } }, STARTER_DESIGNS)
     await engine.load('slide-10-push')
     expect(engine.nextTake()).toMatchObject({ action: 'in', match: { kind: 'match', objectId: 'B' } })
     fake.sent = []
     await engine.take({ fallback: 'cut' })
-    expect(engine.log[0]).toMatchObject({ kind: 'animated', transition: 'in:B' })
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'stream', transition: 'in:B' })
     // Frame 0 is the snap, frame 1 the cut, then the boxes move for the rest.
     expect(fake.sent[1].commands.map((c) => c.constructor.name)).toEqual(['CutCommand'])
     expect(fake.sent.length).toBeGreaterThan(30)
     expect(fake.sent.slice(2).every((b) => b.commands.every((c) => c instanceof Commands.SuperSourceBoxParametersCommand))).toBe(true)
     expect(sw.getState().mixEffects[0].program).toBe(ssInput(0))
+  })
+
+  test('as a macro: the load writes every take, and SS CUT sends one command', async () => {
+    const { sw, fake } = await constellation()
+    const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
+    await engine.load('slide-10-push')
+    await written(engine, 0)
+    expect(engine.slots[0].macros).toMatchObject({ ready: 4, total: 4, problem: null })
+    expect([...fake.macros.keys()].sort()).toEqual([79, 80, 81, 82])
+    fake.sent = []
+    await engine.take({ fallback: 'cut' })
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'macro', transition: 'in:B' })
+    // The PC sent one command, "run macro 81"; the snap, cut and every frame ran on the switcher.
+    expect(fake.sent.flatMap((b) => b.commands.map((c) => c.constructor.name))).toEqual(['MacroActionCommand'])
+    expect(sw.getState().mixEffects[0].program).toBe(ssInput(0))
+    expect(fromRaw(sw.getState().superSources[0].boxes[1])).toEqual(STARTER_DESIGNS[0].objects[0].final)
+  })
+
+  test('the second SuperSource writes into its own block of slots', async () => {
+    const { sw, fake } = await constellation()
+    const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
+    await engine.load('slide-10-push')
+    await written(engine, 0)
+    await engine.take()
+    await engine.load('slide-11')
+    await written(engine, 1)
+    expect(engine.slots[1].macros).toMatchObject({ ready: 6, total: 6 })
+    expect([...fake.macros.keys()].filter((i) => i >= 87).sort()).toEqual([87, 88, 89, 90, 91, 92]) // slots 88 to 93
   })
 })
 

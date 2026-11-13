@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage } from 'electron'
 import { AtemSwitcher, discoverSwitchers } from '@sds/atem'
-import { Design, Engine, ShowSettings, SimSwitcher } from '@sds/core'
-import { AppSnapshot, CHANNEL, ConnectionInfo, Result } from '../shared/api'
+import { Design, Engine, ShowSettings, SimSwitcher, TransitionKey } from '@sds/core'
+import { AppSnapshot, CHANNEL, ConnectionInfo, Rehearsal, Result } from '../shared/api'
 import { LocalApi } from './localApi'
 import { downloadModule } from './module'
 import { flushShow, loadShow, saveShow } from './store'
@@ -190,6 +190,13 @@ const ok = async (fn: () => Promise<unknown> | unknown): Promise<Result> => {
 ipcMain.handle(CHANNEL.getSnapshot, () => snapshot())
 ipcMain.handle(CHANNEL.load, (_e, id: string) => ok(() => engine.load(id)))
 ipcMain.handle(CHANNEL.take, () => engine.take())
+ipcMain.handle(CHANNEL.rehearse, async (_e, id: string, key: TransitionKey): Promise<Rehearsal> => {
+  try {
+    return { ok: true, ...(await engine.rehearse(id, key)) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+})
 ipcMain.handle(CHANNEL.saveDesign, (_e, design: Design) => {
   const i = show.designs.findIndex((d) => d.id === design.id)
   if (i >= 0) show.designs[i] = design

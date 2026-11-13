@@ -436,7 +436,14 @@ Still to do with phase 5: a release workflow that builds and signs the installer
 
 Tested with a fake switcher built on atem-connection's own state object (load, IN, OUT, frame timing, reconnects), and in the built Electron app pointed at an address with no switcher. To finish phase 1 on hardware: run phase 0, connect, and use Slide 10 in a real show. Setup shows how late the PC sent the last take's frames, as a timing check.
 
-Found while building: a take macro can't be made by *recording*, because recording executes each command live, cut included. Smart macros need the macro binary format so the app can write them directly. The phase 0 macro test saves downloaded macro bytes for exactly this; until then, takes stream from the PC.
+Found while building: a take macro can't be made by *recording*, because recording executes each command live, cut included. Smart macros need the macro binary format so the app can write them directly.
+
+**Takes as switcher macros (built 13 Nov 2026, untested on hardware).** The app writes each take straight into a macro slot as bytes, with atem-connection's `uploadMacro` (the data transfer ATEM Software Control uses to restore macros), so nothing runs while it's written. The format comes from LibAtem (MIT): each op is `[u16 length][u16 op id][fields]`, little-endian, positions and crops in 16.16 fixed point, SuperSource V2 ops (protocol 8.0+). The encoder in `packages/core/src/macro.ts` is tested against bytes LibAtem recorded from a real 2 M/E Production Studio 4K.
+
+- A take macro holds the whole take: the snap, the cut, every frame of movement, and for OUT the layout put back afterwards. At SS CUT the PC sends one command, *run macro*, so PC or network lag can't affect the animation.
+- Written when a layout is loaded, in the background, into a block of 8 slots per SuperSource from the reserved range (80 to 99 by default: SS1 80 to 87, SS2 88 to 95, slot 99 for Test on preview). Each macro's name carries a fingerprint of its content, so the app knows which macros are current, even after a restart, and rewrites them when a layout or source changes.
+- Slots holding anyone else's macro are never written. A take whose macro isn't there cuts without animating by default; Setup can allow streaming from the PC instead.
+- Still to confirm on a switcher: that it accepts the uploads and plays them smoothly (Test on preview in the Design tab does this off air), and how long uploads take.
 
 **Phase 2: Design tab.** Mostly built on the simulator. Left: test on preview against a real switcher, snapping while dragging to cutout edges.
 

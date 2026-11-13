@@ -874,6 +874,10 @@
   width: 100px;
 }
 
+.macro-slot {
+  width: 64px;
+}
+
 .two-line {
   display: grid;
   padding: 6px 0;

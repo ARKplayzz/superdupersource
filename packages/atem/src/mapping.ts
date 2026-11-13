@@ -55,7 +55,7 @@ const emptyBox = (): BoxRaw => ({
 })
 
 // Before the first connection there is no state. One empty M/E keeps every reader safe.
-export const DISCONNECTED_STATE: SwitcherState = { mixEffects: [EMPTY_ME], superSources: [], auxes: [], inputs: {} }
+export const DISCONNECTED_STATE: SwitcherState = { mixEffects: [EMPTY_ME], superSources: [], auxes: [], inputs: {}, macros: {} }
 
 export function placeholderInfo(address: string): SwitcherInfo {
   return { model: `ATEM at ${address}`, fps: 50, meCount: 1, superSourceCount: 0, boxCount: 4, macroCount: 0, mediaPlayers: 2, simulated: false }
@@ -121,10 +121,16 @@ export function mapState(s: AtemState): SwitcherState {
     inputs[inp.inputId] = { id: inp.inputId, short: inp.shortName, name: inp.longName, ...inputKind(inp.inputId, inp.internalPortType) }
   }
 
+  const macros: Record<number, string> = {}
+  s.macro.macroProperties.forEach((m, i) => {
+    if (m?.isUsed) macros[i] = m.name
+  })
+
   return {
     mixEffects: mixEffects.length ? mixEffects : [EMPTY_ME],
     superSources,
     auxes: s.video.auxilliaries.filter((a): a is number => typeof a === 'number'),
     inputs,
+    macros,
   }
 }

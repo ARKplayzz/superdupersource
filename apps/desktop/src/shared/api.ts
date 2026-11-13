@@ -41,6 +41,8 @@ export interface FoundSwitcher {
 
 export type Result = { ok: true } | { ok: false; error: string }
 
+export type Rehearsal = { ok: true; via: 'macro' | 'stream' } | { ok: false; error: string }
+
 export type ModuleDownload = { ok: true; version: string; path: string } | { ok: false; error: string }
 
 export interface SdsApi {
@@ -48,6 +50,8 @@ export interface SdsApi {
   onSnapshot(listener: (s: AppSnapshot) => void): () => void
   load(designId: string): Promise<Result>
   take(): Promise<NextTake>
+  // Plays one of a layout's takes on preview, without the cut (Test on preview).
+  rehearse(designId: string, key: string): Promise<Rehearsal>
   saveDesign(design: Design): Promise<void>
   deleteDesign(id: string): Promise<void>
   setShortlist(ids: string[]): Promise<void>
@@ -73,6 +77,7 @@ export const CHANNEL = {
   getSnapshot: 'sds:get-snapshot',
   load: 'sds:load',
   take: 'sds:take',
+  rehearse: 'sds:rehearse',
   saveDesign: 'sds:save-design',
   deleteDesign: 'sds:delete-design',
   setShortlist: 'sds:set-shortlist',

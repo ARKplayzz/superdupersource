@@ -10,6 +10,7 @@ const api: SdsApi = {
   },
   load: (id) => ipcRenderer.invoke(CHANNEL.load, id),
   take: () => ipcRenderer.invoke(CHANNEL.take),
+  rehearse: (id, key) => ipcRenderer.invoke(CHANNEL.rehearse, id, key),
   saveDesign: (d) => ipcRenderer.invoke(CHANNEL.saveDesign, d),
   deleteDesign: (id) => ipcRenderer.invoke(CHANNEL.deleteDesign, id),
   setShortlist: (ids) => ipcRenderer.invoke(CHANNEL.setShortlist, ids),
