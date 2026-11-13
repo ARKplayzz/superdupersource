@@ -14,6 +14,9 @@ export interface PlanContext {
   sources: Record<string, number> // objectId -> input
 }
 
+// Frames between the snap and the cut on the way in (see planIn).
+export const SNAP_FRAMES = 2
+
 // What a take does when nothing matches and there's nothing to animate from.
 export type PlainTake = 'cut' | 'auto'
 
@@ -90,7 +93,9 @@ export function planIn(design: Design, matchedId: string | null, ctx: PlanContex
   const ops: Op[] = [
     ...snap.ops,
     ...disableUnused(ctx, rt.boxOrder.length),
-    { op: 'wait', frames: 1 }, // let the snap land while still on preview
+    // Let the snap land while still on preview. A batch of box changes can spill past one frame,
+    // and cutting before it has finished shows the old layout for a frame; two frames covers it.
+    { op: 'wait', frames: SNAP_FRAMES },
     { op: 'cut', me: ctx.me },
     ...motionOps(ctx, rt.boxOrder, frames, snap.raws),
   ]

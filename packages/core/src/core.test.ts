@@ -580,7 +580,7 @@ describe('switcher macros', () => {
     await drive(s, engine.load('slide-10'))
     await drive(s, Promise.resolve())
     expect(engine.slots[0].macros).toMatchObject({ ready: 4, total: 4, problem: null })
-    expect(Object.values(s.getState().macros).sort()).toEqual(expect.arrayContaining([expect.stringMatching(/^SDS1 in:B [0-9a-f]{8}$/)]))
+    expect(Object.values(s.getState().macros).sort()).toEqual(expect.arrayContaining([expect.stringMatching(/^SDS1 [0-9a-f]{8} in:B$/)]))
     expect(Object.keys(s.getState().macros).map(Number)).toEqual([79, 80, 81, 82]) // slots 80 to 83
 
     const sent: Op[][] = []
@@ -592,6 +592,19 @@ describe('switcher macros', () => {
     expect(s.getState().mixEffects[0].program).toBe(ssInput(0))
     // On air in final form, with the presenter (the matched box) in box 1.
     expect(fromRaw(s.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[1].final)
+  })
+
+  test('macros still count as current if the switcher keeps shorter names', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, Promise.resolve())
+    // Cut every stored name down to "SDS1 <fingerprint>".
+    const state = s.getState() as { macros: Record<number, string> }
+    for (const i of Object.keys(state.macros)) state.macros[Number(i)] = state.macros[Number(i)].slice(0, 13)
+    await drive(s, engine.take())
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'macro' })
   })
 
   test('a macro of yours in the range is never overwritten, and that take cuts instead', async () => {

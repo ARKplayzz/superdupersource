@@ -184,14 +184,22 @@ export class Engine extends Emitter {
   }
 
   // The macro a take needs: where it goes, its name (with a fingerprint of its content) and bytes.
-  private takeMacro(ss: number, design: Design, key: TransitionKey, plan: Plan): { index: number; name: string; bytes: Uint8Array } | null {
+  private takeMacro(ss: number, design: Design, key: TransitionKey, plan: Plan): { index: number; id: string; name: string; bytes: Uint8Array } | null {
     if (plan.kind !== 'animated' || !macroable(plan.ops)) return null
     const { direction, objectId } = parseTransitionKey(key)
     const i = design.objects.findIndex((o) => o.id === objectId)
     const index = this.macroIndex(ss, direction === 'in' ? i : design.objects.length + i)
     if (index === null || i < 0) return null
     const bytes = encodeMacro(plan.ops)
-    return { index, name: `${MACRO_PREFIX}${ss + 1} ${key} ${macroHash(bytes)}`, bytes }
+    // The fingerprint comes first: matching on the start of the name still works if a switcher
+    // keeps shorter names than we write.
+    const id = `${MACRO_PREFIX}${ss + 1} ${macroHash(bytes)}`
+    return { index, id, name: `${id} ${key}`, bytes }
+  }
+
+  // Whether a slot holds this exact macro.
+  private holds(index: number, m: { id: string }): boolean {
+    return this.switcher.getState().macros[index]?.startsWith(m.id) ?? false
   }
 
   // Writes every take of the layout loaded in a slot, skipping macros already there and current.
@@ -228,7 +236,7 @@ export class Engine extends Emitter {
     if (wanted.length < design.objects.length * 2) problems.push(`Macro slots ${this.settings.macros.first} to ${this.settings.macros.last} don't fit every take`)
     for (const m of wanted) {
       if (slot.designId !== design.id) return // another layout was loaded meanwhile
-      if (this.switcher.getState().macros[m.index] === m.name) {
+      if (this.holds(m.index, m)) {
         slot.macros.ready++
         continue
       }
@@ -256,7 +264,7 @@ export class Engine extends Emitter {
     if (!m) return null
     const pending = this.writing.get(slot.ss)
     if (pending) await Promise.race([pending, new Promise((r) => setTimeout(r, MACRO_WAIT_MS))])
-    if (this.switcher.getState().macros[m.index] === m.name) return m.index
+    if (this.holds(m.index, m)) return m.index
     void this.writeMacros(slot) // put it right for next time
     return null
   }

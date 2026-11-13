@@ -97,7 +97,12 @@ export class AtemSwitcher extends Emitter implements Switcher {
     if (index >= this.info.macroCount) throw new Error(`The switcher has no macro ${index + 1}`)
     await this.atem.uploadMacro(index, name, Buffer.from(bytes))
     const until = this.clock.now() + 3000
-    while (this.state.macros[index] !== name) {
+    // A switcher may keep a shorter name than we sent; what it lists must be the start of ours.
+    const listed = () => {
+      const stored = this.state.macros[index]
+      return !!stored && name.startsWith(stored)
+    }
+    while (!listed()) {
       if (this.clock.now() > until) throw new Error(`Macro ${index + 1} didn't show up on the switcher after writing it`)
       await new Promise((r) => setTimeout(r, 20))
     }

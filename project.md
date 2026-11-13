@@ -443,7 +443,12 @@ Found while building: a take macro can't be made by *recording*, because recordi
 - A take macro holds the whole take: the snap, the cut, every frame of movement, and for OUT the layout put back afterwards. At SS CUT the PC sends one command, *run macro*, so PC or network lag can't affect the animation.
 - Written when a layout is loaded, in the background, into a block of 8 slots per SuperSource from the reserved range (80 to 99 by default: SS1 80 to 87, SS2 88 to 95, slot 99 for Test on preview). Each macro's name carries a fingerprint of its content, so the app knows which macros are current, even after a restart, and rewrites them when a layout or source changes.
 - Slots holding anyone else's macro are never written. A take whose macro isn't there cuts without animating by default; Setup can allow streaming from the PC instead.
-- Still to confirm on a switcher: that it accepts the uploads and plays them smoothly (Test on preview in the Design tab does this off air), and how long uploads take.
+- Checked against outside sources (13 Nov 2026):
+  - The 4 M/E Constellation 4K first shipped on ATEM firmware 9.1, so it uses the V2 SuperSource ops. atem-connection 3.10.3 (Oct 2026) is the newest release.
+  - MacroMotion and TouchDirector already generate SuperSource animation macros and send them to switchers, Constellations included, so uploading generated macros works in practice.
+  - Blackmagic's manual sets no limit on actions per macro. The upload carries a 64-byte name; ours are about 20, and matching only needs the start of the name.
+  - Macro steps can spill past a frame (Blackmagic forum, "1 frame previous supersource visible on switch"), and the fix is a sleep before switching to the SuperSource. The snap gets two frames before the cut. Moving frames hold 3 to 6 steps; the snap holds up to 40.
+- Still to confirm on a switcher: that it plays them smoothly (Test on preview in the Design tab does this off air), and how long uploads take.
 
 **Phase 2: Design tab.** Mostly built on the simulator. Left: test on preview against a real switcher, snapping while dragging to cutout edges.
 

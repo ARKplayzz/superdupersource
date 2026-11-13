@@ -223,14 +223,14 @@ describe('AtemSwitcher', () => {
     const res = await engine.take()
     expect(res).toMatchObject({ action: 'in', match: { objectId: 'B' } })
 
-    // Frame 0: snap (boxes 1-2 set, 3-4 off). Frame 1: the cut. Then 35 frames of movement.
+    // Frame 0: snap (boxes 1-2 set, 3-4 off). Frame 2: the cut. Then 35 frames of movement.
     const times = fake.sent.map((b) => b.t - t0)
     expect(times[0]).toBe(0)
     expect(fake.sent[1].commands.map((c) => c.constructor.name)).toEqual(['CutCommand'])
-    expect(times[1]).toBe(20)
+    expect(times[1]).toBe(40) // two frames for the snap to land
     expect(fake.sent.length).toBeGreaterThanOrEqual(30)
     for (let i = 2; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(20)
-    expect(times.at(-1)).toBe(20 * 36)
+    expect(times.at(-1)).toBe(20 * 37)
 
     // On air, in final form, presenter in box 1.
     expect(sw.getState().mixEffects[0].program).toBe(ssInput(0))
