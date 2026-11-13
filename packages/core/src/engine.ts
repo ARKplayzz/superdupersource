@@ -24,7 +24,9 @@ export interface TakeRecord {
   action: 'in' | 'out'
   ss: number
   designId: string
-  kind: Plan['kind']
+  // 'elsewhere': the layout went on or off air from the switcher panel or ATEM Software Control,
+  // which can't animate because the switcher has already cut by the time the app hears of it.
+  kind: Plan['kind'] | 'elsewhere'
   transition?: string
   frames: number
   detail: string
@@ -34,6 +36,8 @@ export class Engine extends Emitter {
   readonly slots: Slot[]
   private designs = new Map<string, Design>()
   readonly log: TakeRecord[] = []
+  // When this engine last started a take, so a change on air without one reads as a switcher take.
+  private lastTakeAt = -Infinity
 
   constructor(
     private readonly switcher: Switcher,
@@ -162,6 +166,7 @@ export class Engine extends Emitter {
 
     // Plain takes leave the phase to onState, which follows the switcher (a mix takes a while).
     const phaseBefore = slot.phase
+    this.lastTakeAt = Date.now()
     if (plan.kind === 'animated') {
       slot.phase = next.action === 'in' ? 'animating-in' : 'animating-out'
       this.changed()
@@ -176,8 +181,9 @@ export class Engine extends Emitter {
       return { action: 'none', reason: `The take stopped: ${e instanceof Error ? e.message : String(e)}` }
     }
     if (plan.kind === 'animated') slot.phase = next.action === 'in' ? 'on-air' : 'armed'
+    this.lastTakeAt = Date.now()
 
-    this.log.unshift({
+    this.record({
       at: Date.now(),
       action: next.action,
       ss: slot.ss,
@@ -187,9 +193,19 @@ export class Engine extends Emitter {
       frames: plan.frames,
       detail: next.match.kind === 'match' ? next.match.detail : next.match.reason,
     })
-    this.log.length = Math.min(this.log.length, 50)
     this.changed()
     return next
+  }
+
+  private record(r: TakeRecord): void {
+    this.log.unshift(r)
+    this.log.length = Math.min(this.log.length, 50)
+  }
+
+  // A take this engine didn't make: on or off air with no SS CUT or SS AUTO in the last few seconds
+  // (a mix from SS AUTO can take a while to land).
+  private takenElsewhere(): boolean {
+    return Date.now() - this.lastTakeAt > 5000
   }
 
   // Takes made elsewhere (panel, ATEM Software Control) never animate (project.md §4.1).
@@ -201,14 +217,28 @@ export class Engine extends Emitter {
       const onAir = isOnAir(state, slot.ss, this.settings.takeMe)
       if (slot.phase === 'armed' && onAir) {
         slot.phase = 'on-air'
+        if (this.takenElsewhere()) this.recordElsewhere('in', slot.ss, design.id)
         this.changed()
       } else if (slot.phase === 'on-air' && !onAir) {
         slot.phase = 'armed'
+        if (this.takenElsewhere()) this.recordElsewhere('out', slot.ss, design.id)
         this.changed()
         if (!this.switcher.busy) void this.switcher.run(armOps(design, this.context(slot.ss, design)))
       }
     }
     this.emit('next', this.nextTake())
+  }
+
+  private recordElsewhere(action: 'in' | 'out', ss: number, designId: string): void {
+    this.record({
+      at: Date.now(),
+      action,
+      ss,
+      designId,
+      kind: 'elsewhere',
+      frames: 0,
+      detail: "Taken on the switcher, not with SS CUT or SS AUTO in Companion, so it couldn't animate",
+    })
   }
 
   private changed(): void {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShowSettings } from '@sds/core/browser'
+import { ShowSettings, TakeRecord, describeNext } from '@sds/core/browser'
 import type { AppSnapshot, FoundSwitcher, ModuleDownload } from '../../../shared/api'
 import { mediaPlayers } from '../shared'
 import { CheckRow } from '../ui'
@@ -20,6 +20,7 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
   const players = mediaPlayers(snap)
   const live = c.status === 'connected' || c.status === 'simulator'
   const late = c.lastTakeLateMs
+  const next = describeNext(snap.designs, snap.next)
 
   return (
     <main className="column-page">
@@ -115,13 +116,49 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
           <div className="rows">
             <CheckRow label="Use simulator instead of ATEM" on={c.mode === 'simulator'} onChange={(on) => void connect(on ? 'simulator' : 'atem', s.connection.address)} />
             <div className="row setting">
+              <span className="grow two-line">
+                <span>Next take</span>
+                <span className="small muted">{next.detail}</span>
+              </span>
+              <span className={next.animated ? 'ok-text' : 'muted'}>{next.headline}</span>
+            </div>
+            <div className="row setting">
               <span className="grow">Last take timing</span>
               <span className="muted num">{late ? `Within ${late.p95} ms, worst ${late.max} ms` : 'No takes yet'}</span>
             </div>
           </div>
         )}
+        {debug && (
+          <>
+            <h3 className="col-title muted">Recent takes</h3>
+            <div className="rows">
+              {snap.log.length === 0 && <div className="row-note muted">No takes since the app started.</div>}
+              {snap.log.slice(0, 8).map((t, i) => (
+                <TakeRow key={`${t.at}-${i}`} take={t} name={snap.designs.find((d) => d.id === t.designId)?.name ?? t.designId} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </main>
+  )
+}
+
+const KIND: Record<TakeRecord['kind'], string> = { animated: 'Animated', plain: 'No animation', elsewhere: 'Switcher take' }
+
+// One take: when, which layout and which way, whether it animated, and why not.
+function TakeRow({ take, name }: { take: TakeRecord; name: string }) {
+  const time = new Date(take.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return (
+    <div className="row setting">
+      <span className="grow two-line">
+        <span>
+          <span className="muted num">{time}</span> {name} {take.action === 'in' ? 'in' : 'out'}
+        </span>
+        <span className="small muted">{take.detail}</span>
+      </span>
+      <span className={take.kind === 'animated' ? 'ok-text' : 'muted'}>{take.kind === 'animated' ? `${KIND.animated}, ${take.frames} frames` : KIND[take.kind]}</span>
+    </div>
   )
 }
 

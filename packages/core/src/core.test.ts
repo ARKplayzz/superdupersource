@@ -337,6 +337,18 @@ describe('engine with the simulator', () => {
     s.cut(0)
     expect(engine.slots[0].phase).toBe('on-air')
     expect(s.getState().superSources[0].boxes).toEqual(before)
+    // It's logged, so the app can say why nothing moved.
+    expect(engine.log[0]).toMatchObject({ action: 'in', kind: 'elsewhere', designId: 'slide-10' })
+  })
+
+  test('a plain SS CUT from Companion is logged as a cut with its reason, not as a switcher take', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    await drive(s, engine.load('slide-10'))
+    s.setProgram(0, WIDE) // nothing in the layout shows the wide shot
+    await drive(s, engine.take())
+    expect(engine.log.map((l) => l.kind)).toEqual(['plain'])
+    expect(engine.log[0].detail).toMatch(/Nothing in/)
   })
 
   test('loading is refused while the only SuperSource is on air', async () => {
@@ -413,6 +425,35 @@ describe('engine with the simulator', () => {
     s.cut(0)
     const slot = await drive(s, engine.load('slide-11'))
     expect(slot.ss).toBe(1)
+  })
+
+  test('4 M/E: an animated take works on the second SuperSource too', async () => {
+    const s = new SimSwitcher({ meCount: 4, superSourceCount: 2 })
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    // SS1 goes in and out again, so it's loaded but free.
+    await drive(s, engine.load('slide-10'))
+    await drive(s, engine.take())
+    s.setPreview(0, CAM)
+    await drive(s, engine.take())
+    // The next layout goes to SS2, the idle one, and animates in from the camera.
+    const slot = await drive(s, engine.load('slide-11'))
+    expect(slot.ss).toBe(1)
+    expect(engine.nextTake()).toMatchObject({ action: 'in', ss: 1, match: { kind: 'match' } })
+    await drive(s, engine.take())
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', ss: 1, designId: 'slide-11' })
+    expect(s.getState().mixEffects[0].program).toBe(ssInput(1))
+  })
+
+  test('taking one layout straight over another cuts, because a SuperSource is on the bus', async () => {
+    const s = new SimSwitcher({ meCount: 4, superSourceCount: 2 })
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    await drive(s, engine.load('slide-10'))
+    await drive(s, engine.take())
+    await drive(s, engine.load('slide-11'))
+    // It takes SS1 out to SS2 on preview, which is a plain cut: there's no camera to animate to.
+    expect(engine.nextTake()).toMatchObject({ action: 'out', ss: 0, match: { kind: 'none', reason: expect.stringMatching(/SuperSource is on the bus/) } })
   })
 })
 
