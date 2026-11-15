@@ -17,7 +17,8 @@ export function useSnapshot(): AppSnapshot | null {
 export function Toast({ message, onDone }: { message: string | null; onDone: () => void }) {
   useEffect(() => {
     if (!message) return
-    const t = setTimeout(onDone, 3500)
+    // Long enough to read: at least 3.5 s, more for longer messages.
+    const t = setTimeout(onDone, Math.max(3500, message.length * 70))
     return () => clearTimeout(t)
   }, [message, onDone])
   return message ? <div className="toast">{message}</div> : null

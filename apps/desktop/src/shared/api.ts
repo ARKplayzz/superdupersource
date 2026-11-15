@@ -1,4 +1,4 @@
-import type { Design, NextTake, ShowSettings, Slot, SwitcherInfo, SwitcherState, TakeRecord } from '@sds/core'
+import type { Design, MacroTiming, NextTake, ShowSettings, Slot, SwitcherInfo, SwitcherState, TakeRecord } from '@sds/core'
 
 // Everything the window shows, pushed from the main process whenever it changes.
 export interface AppSnapshot {
@@ -41,7 +41,9 @@ export interface FoundSwitcher {
 
 export type Result = { ok: true } | { ok: false; error: string }
 
-export type Rehearsal = { ok: true; via: 'macro' | 'stream' } | { ok: false; error: string }
+// Test on preview: how it ran, how long the switcher took against the plan, and whether the macro
+// pace was changed to match this switcher (stepFrames is the pace now in use).
+export type Rehearsal = { ok: true; via: 'macro' | 'stream'; timing: MacroTiming | null; stepFrames: number; repaced: boolean } | { ok: false; error: string }
 
 export type ModuleDownload = { ok: true; version: string; path: string } | { ok: false; error: string }
 

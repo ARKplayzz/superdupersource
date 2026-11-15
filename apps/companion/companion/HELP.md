@@ -18,6 +18,7 @@ The quickest start is the presets.
 
 - **SS CUT** runs the animated take. If a layout is on preview, it animates in from what's on program. If a layout is on program, it animates out to what's on preview. When nothing on the bus matches a box in the layout, it does a plain cut.
 - **SS AUTO** is the same, except that when nothing matches it does the M/E's mix instead of a cut.
+- With no layout on program or preview, SS CUT and SS AUTO are the switcher's own CUT and AUTO, so they can replace those buttons.
 - **Next take** is a display button that shows what SS CUT will do next.
 
 The take buttons turn orange when an animated take is ready, grey when only a plain cut or mix is possible, and white while a take is running.

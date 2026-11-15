@@ -1,6 +1,6 @@
 import { Emitter } from './emitter'
 import { decodeMacro } from './macro'
-import { InputInfo, Op, SuperSourceState, Switcher, SwitcherInfo, SwitcherState, meProgramInput, ssInput } from './switcher'
+import { InputInfo, MacroTiming, Op, SuperSourceState, Switcher, SwitcherInfo, SwitcherState, meProgramInput, ssInput } from './switcher'
 import type { BoxRaw } from './units'
 
 // A switcher that lives in memory, for building and testing without hardware.
@@ -43,6 +43,10 @@ export class SimSwitcher extends Emitter implements Switcher {
   // switcher's macro player, alongside whatever the PC sends).
   private macroBytes = new Map<number, Uint8Array>()
   private player: { ops: Op[]; wait: number } | null = null
+  lastMacro: MacroTiming | null = null
+  // Frames this pretend switcher takes per macro step, to stand in for a slow one in tests.
+  macroStepFrames = 1
+  private startedMacroFrames = 0
   private readonly mixFrames: number
   frame = 0
 
@@ -152,6 +156,10 @@ export class SimSwitcher extends Emitter implements Switcher {
     this.changed()
   }
 
+  private macroFrames(ops: Op[]): number {
+    return ops.reduce((n, o) => (o.op === 'wait' ? n + o.frames * this.macroStepFrames : n), 0)
+  }
+
   // The macro player: everything up to a wait runs in this frame.
   private play(): void {
     const p = this.player
@@ -163,7 +171,7 @@ export class SimSwitcher extends Emitter implements Switcher {
         this.player = null
         break
       }
-      if (op.op === 'wait') p.wait = op.frames
+      if (op.op === 'wait') p.wait = op.frames * this.macroStepFrames
       else {
         this.apply(op)
         changed = true
@@ -221,6 +229,12 @@ export class SimSwitcher extends Emitter implements Switcher {
       }
       this.apply(op)
       changed = true
+      if (op.op === 'macro') {
+        // Hold the PC's queue until the macro has played, as a real switcher is waited on.
+        const took = this.startedMacroFrames
+        this.waitFrames = took + 1
+        this.lastMacro = { plannedMs: (op.frames * 1000) / this.info.fps, tookMs: (took * 1000) / this.info.fps }
+      }
     }
     if (changed) this.changed()
   }
@@ -255,8 +269,10 @@ export class SimSwitcher extends Emitter implements Switcher {
       }
       case 'macro': {
         const bytes = this.macroBytes.get(op.index)
+        this.startedMacroFrames = 0
         if (!bytes) break // an empty slot does nothing, as on a switcher
         this.player = { ops: decodeMacro(bytes), wait: 0 }
+        this.startedMacroFrames = this.macroFrames(this.player.ops)
         this.play()
         break
       }

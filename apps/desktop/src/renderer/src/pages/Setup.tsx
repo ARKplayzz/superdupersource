@@ -82,6 +82,18 @@ export function Setup({ snap }: { snap: AppSnapshot }) {
                   <option value="stream">Stream it from this PC</option>
                 </select>
               </div>
+              <div className="row setting">
+                <span className="grow two-line">
+                  <span>Macro pace</span>
+                  <span className="small muted">Test on preview, in the Design tab, measures this switcher and sets it</span>
+                </span>
+                <select className="setting-select" value={s.macros.stepFrames ?? 1} onChange={(e) => set({ macros: { ...s.macros, stepFrames: Number(e.target.value) } })}>
+                  <option value={1}>A step every frame</option>
+                  <option value={2}>A step every 2 frames</option>
+                  <option value={3}>A step every 3 frames</option>
+                  <option value={4}>A step every 4 frames</option>
+                </select>
+              </div>
               {snap.slots
                 .filter((slot) => slot.designId)
                 .map((slot) => (
@@ -213,6 +225,11 @@ function TakeRow({ take, name }: { take: TakeRecord; name: string }) {
           <span className="muted num">{time}</span> {name} {take.action === 'in' ? 'in' : 'out'}
         </span>
         <span className="small muted">{take.detail}</span>
+        {take.timing && (
+          <span className="small muted num">
+            The switcher took {take.timing.tookMs} ms, planned {take.timing.plannedMs} ms
+          </span>
+        )}
       </span>
       <span className={take.kind === 'animated' ? 'ok-text' : 'muted'}>{take.kind === 'animated' ? `${KIND.animated} ${take.via ? VIA[take.via] : ''}, ${take.frames} frames` : KIND[take.kind]}</span>
     </div>

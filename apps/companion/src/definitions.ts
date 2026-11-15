@@ -57,13 +57,13 @@ export function actions(state: GetState, conn: () => AppConnection | null, log: 
     },
     take_cut: {
       name: 'SS CUT',
-      description: 'Animated take in or out. Cuts when nothing on the bus matches a box',
+      description: 'Animated take in or out. Cuts when nothing matches a box. With no layout on program or preview, it is a regular CUT',
       options: [],
       callback: async () => report('SS CUT')(await (conn()?.request({ type: 'take', fallback: 'cut' }) ?? Promise.resolve({ ok: false, message: 'Not connected' }))),
     },
     take_auto: {
       name: 'SS AUTO',
-      description: 'Animated take in or out. Mixes when nothing on the bus matches a box',
+      description: 'Animated take in or out. Mixes when nothing matches a box. With no layout on program or preview, it is a regular AUTO',
       options: [],
       callback: async () => report('SS AUTO')(await (conn()?.request({ type: 'take', fallback: 'auto' }) ?? Promise.resolve({ ok: false, message: 'Not connected' }))),
     },
@@ -106,7 +106,7 @@ export function feedbacks(state: GetState): CompanionFeedbackDefinitions<ModuleT
           label: 'Kind of take',
           choices: [
             { id: 'animated', label: 'Animated (a box matches the source)' },
-            { id: 'plain', label: 'Plain cut or mix (nothing matches)' },
+            { id: 'plain', label: 'Plain cut or mix (nothing matches, or no layout involved)' },
             { id: 'any', label: 'Either' },
           ],
           default: 'animated',

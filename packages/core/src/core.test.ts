@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { Engine } from './engine'
+import { Engine, calibrateStep } from './engine'
 import { decodeMacro, encodeMacro } from './macro'
 import { lerpBox, offscreen, visibleRect } from './geometry'
 import { GROUP_GRID, GROUP_PRES, SLIDE_10, SLIDE_10_PUSH, STARTER_DESIGNS, TWO_PRESENTATIONS, fingerprint, freshShow, mergeNewStarters, migrateShow, upgradeShow } from './library'
@@ -542,6 +542,35 @@ describe('updating a saved show', () => {
   })
 })
 
+describe('SS CUT and SS AUTO with no layout involved', () => {
+  test('SS AUTO runs the switcher’s own auto, and SS CUT its cut', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    s.setPreview(0, WIDE)
+    expect(engine.nextTake()).toMatchObject({ action: 'plain' })
+    const auto = engine.take({ fallback: 'auto' })
+    await Promise.resolve()
+    expect(s.getState().mixEffects[0].inTransition).toBe(true)
+    await drive(s, auto)
+    for (let i = 0; i < 30; i++) s.tick()
+    expect(s.getState().mixEffects[0]).toMatchObject({ program: WIDE, preview: CAM, inTransition: false })
+    await drive(s, engine.take({ fallback: 'cut' }))
+    expect(s.getState().mixEffects[0]).toMatchObject({ program: CAM, preview: WIDE })
+    expect(engine.log).toEqual([]) // regular takes aren't layout takes
+  })
+
+  test('a loaded layout that is not on program or preview does not get in the way', async () => {
+    const s = sim()
+    const engine = new Engine(s, settings, DESIGNS)
+    await drive(s, engine.load('slide-10'))
+    s.setPreview(0, WIDE) // the operator picks something else
+    expect(engine.nextTake()).toMatchObject({ action: 'plain' })
+    await drive(s, engine.take({ fallback: 'cut' }))
+    expect(s.getState().mixEffects[0].program).toBe(WIDE)
+  })
+})
+
 describe('switcher macros', () => {
   const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join('-')
   const box = (props: Record<string, number | boolean>) => encodeMacro([{ op: 'box', ss: 0, box: 0, props }])
@@ -587,8 +616,8 @@ describe('switcher macros', () => {
     const run = s.run.bind(s)
     s.run = (ops: Op[]) => (sent.push(ops), run(ops))
     await drive(s, engine.take())
-    expect(sent[0][0]).toEqual({ op: 'macro', index: 80 }) // in:B is the second take of SS1
-    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'macro', transition: 'in:B' })
+    expect(sent[0]).toEqual([{ op: 'macro', index: 80, frames: 37 }]) // in:B is the second take of SS1
+    expect(engine.log[0]).toMatchObject({ kind: 'animated', via: 'macro', transition: 'in:B', timing: { plannedMs: 740, tookMs: 740 } })
     expect(s.getState().mixEffects[0].program).toBe(ssInput(0))
     // On air in final form, with the presenter (the matched box) in box 1.
     expect(fromRaw(s.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[1].final)
@@ -642,6 +671,32 @@ describe('switcher macros', () => {
     await drive(s, new Promise((r) => setTimeout(r, 10)))
     expect(s.getState().macros[80]).not.toBe(before)
     expect(engine.slots[0].macros).toMatchObject({ ready: 4, writing: false })
+  })
+
+  test('a switcher that takes two frames per macro step is measured, then paced to match', async () => {
+    const s = sim()
+    s.macroStepFrames = 2
+    const engine = new Engine(s, settings, DESIGNS)
+    s.setProgram(0, CAM)
+    // At the default pace the take is planned for 740 ms (37 frames) and this switcher takes twice that.
+    const first = await drive(s, engine.rehearse('slide-10', 'in:B'), 2000)
+    expect(first.timing).toEqual({ plannedMs: 740, tookMs: 1480 })
+    expect(first.stepFrames).toBe(2)
+    // With the pace saved, the macro has half the steps and plays in the designed time.
+    engine.setSettings({ ...settings, macros: { ...settings.macros, stepFrames: first.stepFrames } })
+    const second = await drive(s, engine.rehearse('slide-10', 'in:B'), 2000)
+    expect(second.timing!.tookMs).toBeGreaterThan(second.timing!.plannedMs * 0.9)
+    expect(second.timing!.tookMs).toBeLessThan(second.timing!.plannedMs * 1.1)
+    expect(second.stepFrames).toBe(2)
+    // The layout still ends in its final form.
+    expect(fromRaw(s.getState().superSources[0].boxes[0])).toEqual(SLIDE_10.objects[1].final)
+  })
+
+  test('small timing differences leave the pace alone, and it can come back down', () => {
+    expect(calibrateStep(1, { plannedMs: 900, tookMs: 960 })).toBe(1)
+    expect(calibrateStep(1, { plannedMs: 900, tookMs: 1800 })).toBe(2)
+    expect(calibrateStep(2, { plannedMs: 900, tookMs: 450 })).toBe(1)
+    expect(calibrateStep(1, null)).toBe(1)
   })
 
   test('Test on preview plays the take without cutting', async () => {

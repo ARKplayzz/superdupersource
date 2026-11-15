@@ -192,7 +192,15 @@ ipcMain.handle(CHANNEL.load, (_e, id: string) => ok(() => engine.load(id)))
 ipcMain.handle(CHANNEL.take, () => engine.take())
 ipcMain.handle(CHANNEL.rehearse, async (_e, id: string, key: TransitionKey): Promise<Rehearsal> => {
   try {
-    return { ok: true, ...(await engine.rehearse(id, key)) }
+    const r = await engine.rehearse(id, key)
+    // The test measured how fast this switcher plays macros; keep the pace that matches it.
+    const repaced = r.via === 'macro' && r.stepFrames !== (show.settings.macros.stepFrames ?? 1)
+    if (repaced) {
+      show.settings = { ...show.settings, macros: { ...show.settings.macros, stepFrames: r.stepFrames } }
+      engine.setSettings(show.settings)
+      persist()
+    }
+    return { ok: true, via: r.via, timing: r.timing, stepFrames: r.stepFrames, repaced }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }

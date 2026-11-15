@@ -1,5 +1,5 @@
 import { Atem, AtemState, Commands, Enums } from 'atem-connection'
-import { Emitter, type Op, type Switcher, type SwitcherInfo, type SwitcherState } from '@sds/core'
+import { Emitter, type MacroTiming, type Op, type Switcher, type SwitcherInfo, type SwitcherState } from '@sds/core'
 import { DISCONNECTED_STATE, mapInfo, mapState, placeholderInfo } from './mapping'
 
 // A real ATEM behind the core's Switcher interface.
@@ -47,6 +47,10 @@ export class AtemSwitcher extends Emitter implements Switcher {
   lastError: string | null = null
   // How late each streamed frame went out, for diagnostics (last take only).
   lastTakeLateMs: number[] = []
+  // The last macro run: planned length against how long the switcher's macro player ran.
+  lastMacro: MacroTiming | null = null
+  // When the switcher's macro player was last seen starting and stopping (performance.now()).
+  private macroPlayer = { running: false, startedAt: 0, stoppedAt: 0 }
 
   private state: SwitcherState = DISCONNECTED_STATE
   private queue: { ops: Op[]; resolve: () => void; reject: (e: unknown) => void }[] = []
@@ -178,9 +182,15 @@ export class AtemSwitcher extends Emitter implements Switcher {
         case 'preview':
           batch.push(new Commands.PreviewInputCommand(op.me, op.input))
           break
-        case 'macro':
+        case 'macro': {
           batch.push(new Commands.MacroActionCommand(op.index, Enums.MacroAction.Run))
+          const sentAt = performance.now()
+          await flush()
+          const took = await this.macroFinished(sentAt, (op.frames * 1000) / this.info.fps)
+          this.lastMacro = { plannedMs: Math.round((op.frames * 1000) / this.info.fps), tookMs: Math.round(took) }
+          due = this.clock.now()
           break
+        }
         case 'art':
           // Its command differs by protocol version; atem-connection picks the right one.
           // Send what's queued first so the order holds.
@@ -194,6 +204,32 @@ export class AtemSwitcher extends Emitter implements Switcher {
     }
     await flush()
     this.lastTakeLateMs = late
+  }
+
+  // Waits for the macro started at `sentAt` to finish playing, and returns how long the switcher's
+  // macro player ran. If the switcher never reports the player starting, it waits out the planned
+  // time. Gives up at four times the plan plus a couple of seconds, so a stuck macro can't hang a take.
+  private async macroFinished(sentAt: number, plannedMs: number): Promise<number> {
+    const giveUp = sentAt + plannedMs * 4 + 2000
+    const noStart = sentAt + plannedMs + 1000
+    for (;;) {
+      const p = this.macroPlayer
+      const started = p.startedAt >= sentAt
+      if (started && !p.running && p.stoppedAt >= p.startedAt) return p.stoppedAt - p.startedAt
+      const now = performance.now()
+      if (!started && now > noStart) return plannedMs
+      if (now > giveUp) return now - (started ? p.startedAt : sentAt)
+      if (this.status !== 'connected') throw new Error('Lost the switcher while a macro was playing')
+      await new Promise((r) => setTimeout(r, 2))
+    }
+  }
+
+  private trackMacroPlayer(s: AtemState) {
+    const running = s.macro.macroPlayer.isRunning
+    if (running === this.macroPlayer.running) return
+    this.macroPlayer.running = running
+    if (running) this.macroPlayer.startedAt = performance.now()
+    else this.macroPlayer.stoppedAt = performance.now()
   }
 
   private onConnected = () => {
@@ -214,6 +250,7 @@ export class AtemSwitcher extends Emitter implements Switcher {
   }
 
   private onStateChanged = (s: AtemState) => {
+    this.trackMacroPlayer(s)
     if (this.status !== 'connected') return
     this.state = mapState(s)
     this.emit('state', this.state)

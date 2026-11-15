@@ -448,7 +448,11 @@ Found while building: a take macro can't be made by *recording*, because recordi
   - MacroMotion and TouchDirector already generate SuperSource animation macros and send them to switchers, Constellations included, so uploading generated macros works in practice.
   - Blackmagic's manual sets no limit on actions per macro. The upload carries a 64-byte name; ours are about 20, and matching only needs the start of the name.
   - Macro steps can spill past a frame (Blackmagic forum, "1 frame previous supersource visible on switch"), and the fix is a sleep before switching to the SuperSource. The snap gets two frames before the cut. Moving frames hold 3 to 6 steps; the snap holds up to 40.
-- Still to confirm on a switcher: that it plays them smoothly (Test on preview in the Design tab does this off air), and how long uploads take.
+- First run on the 4 M/E Constellation 4K (15 Nov 2026): macros upload and play, but playback looked laggy and possibly longer than designed. Other generators pace macros the same way (box ops, then a one-frame sleep), so the cause isn't known yet. Since then:
+  - A macro take waits for the switcher's macro player to stop, and records how long it ran against the plan (shown in Setup, Debug, Recent takes).
+  - `macros.stepFrames` is how many frames this switcher takes per macro step. Test on preview measures a run and sets it (took ÷ planned, rounded, 1 to 4), so a slower switcher gets fewer, bigger steps and the take lasts as long as designed. It can also be set by hand in Setup.
+  - Still open: whether the lag is the switcher taking two frames per step (the pace fixes the length, at half the update rate), or something else. The measured times will say.
+- SS CUT and SS AUTO are the switcher's own CUT and AUTO when no layout is on program or preview (`NextTake` action `plain`), so they can replace those buttons.
 
 **Phase 2: Design tab.** Mostly built on the simulator. Left: test on preview against a real switcher, snapping while dragging to cutout edges.
 

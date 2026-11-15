@@ -58,7 +58,7 @@ describe('Companion module <-> app', () => {
     const state = () => t.conn.state as RemoteState
     // Shortlist first, in shortlist order.
     expect(state().designs.slice(0, 2).map((d) => d.id)).toEqual(['slide-10', 'slide-11'])
-    expect(state().next.action).toBe('none')
+    expect(state().next.action).toBe('plain') // no layout yet: the take buttons are regular CUT and AUTO
 
     // Feedback callbacks read the live state.
     const fb = feedbacks(() => t.conn.state)
@@ -97,8 +97,24 @@ describe('Companion module <-> app', () => {
     await t.api.listen(PORT, false)
     t.conn.connect()
     await until(() => t.conn.state !== null)
-    expect(await t.conn.request({ type: 'take', fallback: 'cut' })).toEqual({ ok: false, message: 'No loaded layout on program or preview' })
     expect(await t.conn.request({ type: 'load', designId: 'nope' })).toMatchObject({ ok: false, message: 'Unknown design nope' })
+  })
+
+  test('with no layout involved, SS CUT and SS AUTO are the switcher’s own CUT and AUTO', async () => {
+    const t = setup()
+    cleanup = async () => {
+      t.conn.close()
+      await t.api.close()
+      t.switcher.stop()
+    }
+    await t.api.listen(PORT, false)
+    t.conn.connect()
+    await until(() => t.conn.state !== null)
+    const before = { ...t.switcher.getState().mixEffects[0] }
+    expect(await t.conn.request({ type: 'take', fallback: 'cut' })).toEqual({ ok: true })
+    expect(t.switcher.getState().mixEffects[0]).toMatchObject({ program: before.preview, preview: before.program })
+    expect(await t.conn.request({ type: 'take', fallback: 'auto' })).toEqual({ ok: true })
+    await until(() => t.switcher.getState().mixEffects[0].program === before.program)
   })
 
   test('SS AUTO mixes when nothing matches', async () => {

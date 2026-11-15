@@ -9,6 +9,7 @@ export function objectName(design: Design | undefined, id: string): string {
 // Shared by the app window and the Companion module, so a button and the screen agree.
 export function describeNext(designs: Design[], next: NextTake): { headline: string; detail: string; animated: boolean } {
   if (next.action === 'none') return { headline: 'Nothing to take', detail: next.reason, animated: false }
+  if (next.action === 'plain') return { headline: 'Regular cut or auto', detail: next.reason, animated: false }
   const design = designs.find((d) => d.id === next.designId)
   const name = design?.name ?? next.designId
   if (next.match.kind === 'none') {

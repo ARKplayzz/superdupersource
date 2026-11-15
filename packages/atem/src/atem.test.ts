@@ -61,10 +61,21 @@ class FakeAtem extends EventEmitter implements AtemLike {
     setTimeout(() => this.emit('stateChanged', this.state, [`macro.macroProperties.${index}`]), 1)
   }
 
-  // Running a macro applies its ops as the switcher would, all at once (timing isn't modelled here).
+  // How long this pretend switcher's macro player takes per frame of sleep, in real milliseconds.
+  macroMsPerFrame = 0
+
+  // Running a macro applies its ops as the switcher would, all at once, then reports the macro
+  // player stopping after the macro's sleeps.
   private runMacro(index: number, paths: string[]) {
     const data = this.macros.get(index)
     if (!data) return
+    const sleeps = (decodeMacro(data) as Op[]).reduce((n, o) => (o.op === 'wait' ? n + o.frames : n), 0)
+    this.state.macro.macroPlayer.isRunning = true
+    this.emit('stateChanged', this.state, ['macro.macroPlayer'])
+    setTimeout(() => {
+      this.state.macro.macroPlayer.isRunning = false
+      this.emit('stateChanged', this.state, ['macro.macroPlayer'])
+    }, 1 + sleeps * this.macroMsPerFrame)
     for (const op of decodeMacro(data) as Op[]) {
       if (op.op === 'cut') {
         const me = AtemStateUtil.getMixEffect(this.state, op.me)
@@ -324,6 +335,20 @@ describe('4 M/E Constellation 4K', () => {
     expect(fake.sent.flatMap((b) => b.commands.map((c) => c.constructor.name))).toEqual(['MacroActionCommand'])
     expect(sw.getState().mixEffects[0].program).toBe(ssInput(0))
     expect(fromRaw(sw.getState().superSources[0].boxes[1])).toEqual(STARTER_DESIGNS[0].objects[0].final)
+  })
+
+  test('a macro that plays slower than planned is waited for and timed', async () => {
+    const { sw, fake } = await constellation()
+    fake.macroMsPerFrame = 3 // 37 frames of sleeps take about 110 ms of real time here
+    const engine = new Engine(sw, DEFAULT_SETTINGS, STARTER_DESIGNS)
+    await engine.load('slide-10-push')
+    await written(engine, 0)
+    const t0 = performance.now()
+    await engine.take()
+    expect(performance.now() - t0).toBeGreaterThan(100) // the take waited for the macro player
+    expect(sw.lastMacro!.tookMs).toBeGreaterThan(100)
+    expect(engine.log[0].timing).toEqual(sw.lastMacro)
+    expect(engine.slots[0].phase).toBe('on-air')
   })
 
   test('the second SuperSource writes into its own block of slots', async () => {

@@ -3,7 +3,7 @@ import { MatchResult, findMatch, inputFor } from './matching'
 import { MACRO_PREFIX, encodeMacro, macroHash, macroable } from './macro'
 import { Design, ShowSettings, TransitionKey, backgroundFor, parseTransitionKey } from './model'
 import { PlainTake, Plan, PlanContext, armOps, planIn, planOut } from './plan'
-import { Op, Switcher, SwitcherState, isOnAir, isOnPreview, ssInput } from './switcher'
+import { MacroTiming, Op, Switcher, SwitcherState, isOnAir, isOnPreview, ssInput } from './switcher'
 
 // Owns the SuperSource engines on a switcher: loads designs into them, works out what the next
 // take should do, and runs it (project.md §5).
@@ -34,7 +34,24 @@ const MACRO_WAIT_MS = 5000
 
 export type NextTake =
   | { action: 'in' | 'out'; ss: number; designId: string; match: MatchResult }
+  // No layout is involved, so SS CUT and SS AUTO work as the switcher's own CUT and AUTO.
+  | { action: 'plain'; reason: string }
   | { action: 'none'; reason: string }
+
+// What Test on preview found: how it ran, how long the switcher took against the plan, and the
+// macro pace that would match this switcher (the caller saves it when it differs).
+export interface Rehearsal {
+  via: 'macro' | 'stream'
+  timing: MacroTiming | null
+  stepFrames: number
+}
+
+// The macro pace a measured run calls for: if the switcher took twice as long as planned at the
+// current pace, each step needs to cover twice the movement. Small differences change nothing.
+export function calibrateStep(current: number, timing: MacroTiming | null): number {
+  if (!timing || timing.plannedMs <= 0 || timing.tookMs <= 0) return current
+  return Math.min(4, Math.max(1, Math.round((current * timing.tookMs) / timing.plannedMs)))
+}
 
 export interface TakeRecord {
   at: number
@@ -49,6 +66,8 @@ export interface TakeRecord {
   detail: string
   // How an animated take ran: as a macro on the switcher, or streamed frame by frame from this PC.
   via?: 'macro' | 'stream'
+  // For a macro: how long it was meant to take and how long the switcher took.
+  timing?: MacroTiming
 }
 
 export class Engine extends Emitter {
@@ -115,6 +134,11 @@ export class Engine extends Emitter {
       if (input !== undefined) sources[o.id] = input
     }
     return { ss, me: this.settings.takeMe, fps: this.switcher.info.fps, boxCount: this.switcher.info.boxCount, sources }
+  }
+
+  // The same, paced for macros on this switcher (see ShowSettings.macros.stepFrames).
+  private macroContext(ss: number, design: Design): PlanContext {
+    return { ...this.context(ss, design), stepFrames: this.settings.macros.stepFrames ?? 1 }
   }
 
   private busy(): boolean {
@@ -184,9 +208,11 @@ export class Engine extends Emitter {
   }
 
   // The macro a take needs: where it goes, its name (with a fingerprint of its content) and bytes.
-  private takeMacro(ss: number, design: Design, key: TransitionKey, plan: Plan): { index: number; id: string; name: string; bytes: Uint8Array } | null {
-    if (plan.kind !== 'animated' || !macroable(plan.ops)) return null
+  private takeMacro(ss: number, design: Design, key: TransitionKey): { index: number; id: string; name: string; bytes: Uint8Array } | null {
     const { direction, objectId } = parseTransitionKey(key)
+    const ctx = this.macroContext(ss, design)
+    const plan = direction === 'in' ? planIn(design, objectId, ctx) : planOut(design, objectId, ctx)
+    if (plan.kind !== 'animated' || !macroable(plan.ops)) return null
     const i = design.objects.findIndex((o) => o.id === objectId)
     const index = this.macroIndex(ss, direction === 'in' ? i : design.objects.length + i)
     if (index === null || i < 0) return null
@@ -218,12 +244,11 @@ export class Engine extends Emitter {
       this.changed()
       return
     }
-    const ctx = this.context(slot.ss, design)
     const wanted = design.objects.flatMap((o) =>
       (['in', 'out'] as const).flatMap((dir) => {
         const key: TransitionKey = `${dir}:${o.id}`
         try {
-          const m = this.takeMacro(slot.ss, design, key, dir === 'in' ? planIn(design, o.id, ctx) : planOut(design, o.id, ctx))
+          const m = this.takeMacro(slot.ss, design, key)
           return m ? [m] : []
         } catch {
           return [] // the layout doesn't fit this switcher; load reports that
@@ -260,7 +285,7 @@ export class Engine extends Emitter {
   // switcher and matches what the take should do now. Null means it isn't.
   private async macroForTake(slot: Slot, design: Design, plan: Plan): Promise<number | null> {
     if (!this.macrosOn() || !plan.transition) return null
-    const m = this.takeMacro(slot.ss, design, plan.transition.key, plan)
+    const m = this.takeMacro(slot.ss, design, plan.transition.key)
     if (!m) return null
     const pending = this.writing.get(slot.ss)
     if (pending) await Promise.race([pending, new Promise((r) => setTimeout(r, MACRO_WAIT_MS))])
@@ -271,26 +296,31 @@ export class Engine extends Emitter {
 
   // Plays a take on the layout while it's on preview, without the cut: Test on preview in the
   // Design tab. Loads the layout to preview first if it isn't there. Runs as a macro when it can.
-  async rehearse(designId: string, key: TransitionKey): Promise<{ via: 'macro' | 'stream' }> {
+  async rehearse(designId: string, key: TransitionKey): Promise<Rehearsal> {
     if (this.busy()) throw new Error('A take is running')
     const me = this.settings.takeMe
     let slot = this.slots.find((s) => s.designId === designId && isOnPreview(this.switcher.getState(), s.ss, me))
     if (!slot) slot = await this.load(designId)
     if (isOnAir(this.switcher.getState(), slot.ss, me)) throw new Error("It's on air. Test it while it's only on preview.")
     const design = this.design(designId)!
-    const ctx = this.context(slot.ss, design)
     const { direction, objectId } = parseTransitionKey(key)
-    const plan = direction === 'in' ? planIn(design, objectId, ctx) : planOut(design, objectId, ctx)
-    // No cut: it stays on preview. Going out, hold the full-screen box for a moment so it can be seen.
-    const ops = plan.ops.flatMap((o): Op[] => (o.op !== 'cut' ? [o] : direction === 'out' ? [{ op: 'wait', frames: Math.round(this.switcher.info.fps) }] : []))
+    const step = this.settings.macros.stepFrames ?? 1
+    // No cut: it stays on preview. Going out, hold the full-screen box for a second so it can be seen.
+    const build = (ctx: PlanContext): Op[] => {
+      const plan = direction === 'in' ? planIn(design, objectId, ctx) : planOut(design, objectId, ctx)
+      const hold = Math.round(this.switcher.info.fps / (ctx.stepFrames ?? 1))
+      return plan.ops.flatMap((o): Op[] => (o.op !== 'cut' ? [o] : direction === 'out' ? [{ op: 'wait', frames: hold }] : []))
+    }
+    const streamed = build(this.context(slot.ss, design))
     const index = this.testMacroIndex()
     if (this.macrosOn() && index !== null && this.mayWrite(index)) {
-      await this.switcher.uploadMacro!(index, `${MACRO_PREFIX} test`, encodeMacro(ops))
-      await this.switcher.run([{ op: 'macro', index }, { op: 'wait', frames: frameCount(ops) + 1 }])
-      return { via: 'macro' }
+      await this.switcher.uploadMacro!(index, `${MACRO_PREFIX} test`, encodeMacro(build(this.macroContext(slot.ss, design))))
+      await this.switcher.run([{ op: 'macro', index, frames: frameCount(streamed) }])
+      const timing = this.switcher.lastMacro ?? null
+      return { via: 'macro', timing, stepFrames: calibrateStep(step, timing) }
     }
-    await this.switcher.run(ops)
-    return { via: 'stream' }
+    await this.switcher.run(streamed)
+    return { via: 'stream', timing: null, stepFrames: step }
   }
 
   // What SS CUT would do right now. Companion uses this for button feedback.
@@ -301,7 +331,7 @@ export class Engine extends Emitter {
     for (const slot of this.slots) {
       const design = this.design(slot.designId)
       if (!design || !isOnAir(state, slot.ss, me)) continue
-      if (isOnPreview(state, slot.ss, me)) return { action: 'none', reason: 'The layout is on both program and preview' }
+      if (isOnPreview(state, slot.ss, me)) return { action: 'plain', reason: 'The layout is on both program and preview' }
       return { action: 'out', ss: slot.ss, designId: design.id, match: findMatch(design, this.settings, mix.preview, state) }
     }
     for (const slot of this.slots) {
@@ -309,7 +339,7 @@ export class Engine extends Emitter {
       if (!design || !isOnPreview(state, slot.ss, me)) continue
       return { action: 'in', ss: slot.ss, designId: design.id, match: findMatch(design, this.settings, mix.program, state) }
     }
-    return { action: 'none', reason: 'No loaded layout on program or preview' }
+    return { action: 'plain', reason: 'No layout on program or preview, so SS CUT and SS AUTO work as CUT and AUTO' }
   }
 
   // SS CUT (fallback 'cut') or SS AUTO (fallback 'auto'). The fallback only applies when nothing
@@ -319,6 +349,17 @@ export class Engine extends Emitter {
     if (this.switcher.getState().mixEffects[this.settings.takeMe].inTransition) return { action: 'none', reason: 'A transition is already running' }
     const next = this.nextTake()
     if (next.action === 'none') return next
+    // Nothing of ours is involved: the button is the switcher's own CUT or AUTO.
+    if (next.action === 'plain') {
+      this.lastTakeAt = Date.now()
+      try {
+        await this.switcher.run([{ op: opts.fallback ?? 'cut', me: this.settings.takeMe }])
+      } catch (e) {
+        return { action: 'none', reason: `The take stopped: ${e instanceof Error ? e.message : String(e)}` }
+      }
+      this.lastTakeAt = Date.now()
+      return next
+    }
 
     const slot = this.slots[next.ss]
     const design = this.design(next.designId)!
@@ -335,7 +376,7 @@ export class Engine extends Emitter {
     if (plan.kind === 'animated') {
       const index = await this.macroForTake(slot, design, plan)
       if (index !== null) {
-        ops = [{ op: 'macro', index }, { op: 'wait', frames: frameCount(plan.ops) + 1 }]
+        ops = [{ op: 'macro', index, frames: frameCount(plan.ops) }]
         via = 'macro'
       } else if (this.macrosOn() && this.settings.macros.fallback === 'cut') {
         plan = next.action === 'in' ? planIn(design, null, ctx, fallback) : planOut(design, null, ctx, fallback)
@@ -375,6 +416,7 @@ export class Engine extends Emitter {
       frames: plan.frames,
       detail: note || (next.match.kind === 'match' ? next.match.detail : next.match.reason),
       via,
+      timing: via === 'macro' ? (this.switcher.lastMacro ?? undefined) : undefined,
     })
     this.changed()
     return next

@@ -92,7 +92,8 @@ export function createBrowserApi(): SdsApi {
     take: () => engine.take(),
     rehearse: async (id, key) => {
       try {
-        return { ok: true, ...(await engine.rehearse(id, key as TransitionKey)) }
+        const r = await engine.rehearse(id, key as TransitionKey)
+        return { ok: true, via: r.via, timing: r.timing, stepFrames: r.stepFrames, repaced: false }
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }
       }

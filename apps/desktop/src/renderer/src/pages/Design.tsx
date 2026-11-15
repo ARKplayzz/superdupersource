@@ -552,7 +552,12 @@ export function Design({
                 setTesting(true)
                 const res = await window.sds.rehearse(design.id, key)
                 setTesting(false)
-                onMessage(res.ok ? `Played ${transitionLabel(design, key)} on preview, ${res.via === 'macro' ? 'as a switcher macro' : 'streamed from this PC'}` : res.error)
+                if (!res.ok) return onMessage(res.error)
+                const secs = (ms: number) => `${(ms / 1000).toFixed(2)} s`
+                const how = res.via === 'macro' ? 'as a switcher macro' : 'streamed from this PC'
+                const time = res.timing ? `. It took ${secs(res.timing.tookMs)}, planned ${secs(res.timing.plannedMs)}` : ''
+                const paced = res.repaced ? '. Macros are now paced for this switcher: test again' : ''
+                onMessage(`Played ${transitionLabel(design, key)} on preview ${how}${time}${paced}`)
               }}
             >
               {testing ? 'Testing…' : 'Test on preview'}

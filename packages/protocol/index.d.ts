@@ -25,7 +25,8 @@ export interface RemoteSlot {
 }
 
 export interface RemoteNextTake {
-  action: 'in' | 'out' | 'none'
+  // 'plain': no layout is involved, so SS CUT and SS AUTO work as the switcher's own CUT and AUTO.
+  action: 'in' | 'out' | 'plain' | 'none'
   animated: boolean
   headline: string // "Slides + presenter: in from Presenter"
   detail: string

@@ -48,6 +48,11 @@ export interface SwitcherInfo {
   simulated: boolean
 }
 
+export interface MacroTiming {
+  plannedMs: number
+  tookMs: number
+}
+
 // One step of a take, at frame granularity. A run of ops is what becomes a switcher macro.
 export type Op =
   | { op: 'box'; ss: number; box: number; props: Partial<BoxRaw> }
@@ -56,7 +61,9 @@ export type Op =
   | { op: 'auto'; me: number } // the M/E's own mix, at its transition rate
   | { op: 'preview'; me: number; input: number }
   | { op: 'art'; ss: number; fill: number; behind: boolean }
-  | { op: 'macro'; index: number } // run a macro stored on the switcher (0-based slot)
+  // Run a macro stored on the switcher (0-based slot) and wait for it to finish. `frames` is how
+  // long it should take; the switcher reports how long it really took (see Switcher.lastMacro).
+  | { op: 'macro'; index: number; frames: number }
 
 export interface Switcher {
   readonly info: SwitcherInfo
@@ -66,6 +73,8 @@ export interface Switcher {
   readonly busy: boolean
   // Writes a macro into a slot without running it. Missing when the switcher can't take macros.
   uploadMacro?(index: number, name: string, bytes: Uint8Array): Promise<void>
+  // The last macro run: how long it was meant to take and how long the switcher took to play it.
+  readonly lastMacro?: MacroTiming | null
   on(event: 'state', listener: (state: SwitcherState) => void): void
   off(event: 'state', listener: (state: SwitcherState) => void): void
 }

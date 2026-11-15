@@ -12,6 +12,9 @@ export interface PlanContext {
   fps: number
   boxCount: number
   sources: Record<string, number> // objectId -> input
+  // For macros on a switcher that takes more than one frame per step: each step then covers this
+  // many frames of movement. A plan built this way is only right as a macro on that switcher.
+  stepFrames?: number
 }
 
 // Frames between the snap and the cut on the way in (see planIn).
@@ -88,7 +91,7 @@ export function planIn(design: Design, matchedId: string | null, ctx: PlanContex
   if (!matchedId) return { kind: 'plain', direction: 'in', frames: 0, ops: [{ op: plain, me: ctx.me }] }
 
   const rt = resolveTransition(design, 'in', matchedId)
-  const frames = buildFrames(rt, ctx.fps)
+  const frames = buildFrames(rt, ctx.fps / (ctx.stepFrames ?? 1))
   const snap = boxOps(ctx, rt.boxOrder, frames[0])
   const ops: Op[] = [
     ...snap.ops,
@@ -112,7 +115,7 @@ export function planOut(design: Design, matchedId: string | null, ctx: PlanConte
   if (!matchedId) return { kind: 'plain', direction: 'out', frames: 0, ops: [{ op: plain, me: ctx.me }] }
 
   const rt = resolveTransition(design, 'out', matchedId)
-  const frames = buildFrames(rt, ctx.fps)
+  const frames = buildFrames(rt, ctx.fps / (ctx.stepFrames ?? 1))
   const snap = boxOps(ctx, rt.boxOrder, frames[0])
   const ops: Op[] = [
     ...snap.ops,

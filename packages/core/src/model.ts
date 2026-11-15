@@ -70,7 +70,10 @@ export interface ShowSettings {
   // Takes as switcher macros: each layout's takes are written into these slots (numbered from 1,
   // as ATEM Software Control shows them) and run on the switcher. `fallback` is what a take does
   // when its macro isn't on the switcher: stream it from this PC, or cut without animating.
-  macros: { enabled: boolean; first: number; last: number; fallback: 'stream' | 'cut' }
+  // `stepFrames` is how many video frames this switcher takes to play one step of a macro (a batch
+  // of box moves, then a one-frame sleep). 1 is the ideal. Test on preview measures it and sets it,
+  // so a slower switcher gets fewer, bigger steps and the take still lasts as long as designed.
+  macros: { enabled: boolean; first: number; last: number; fallback: 'stream' | 'cut'; stepFrames?: number }
 }
 
 export const DEFAULT_SETTINGS: ShowSettings = {
@@ -94,7 +97,7 @@ export const DEFAULT_SETTINGS: ShowSettings = {
   localApi: { port: 8710, allowRemote: false },
   // A new install waits for a switcher address. The simulator is under Setup, Debug.
   connection: { mode: 'atem', address: '' },
-  macros: { enabled: true, first: 80, last: 99, fallback: 'cut' },
+  macros: { enabled: true, first: 80, last: 99, fallback: 'cut', stepFrames: 1 },
 }
 
 // The background a design's art fill comes from.
